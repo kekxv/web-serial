@@ -1,0 +1,106 @@
+.shell-terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0d1117;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #30363d;
+}
+
+.shell-terminal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.shell-terminal-header h6 {
+  color: #c9d1d9;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.shell-terminal-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.shell-terminal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.shell-line {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.shell-prompt {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+
+.shell-prompt i {
+  margin-right: 4px;
+}
+
+.prompt-active {
+  color: #3fb950;
+  font-weight: bold;
+}
+
+.prompt-inactive {
+  color: #8b949e;
+}
+
+.shell-content {
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.shell-input shell-content,
+.shell-output .shell-content {
+  color: #c9d1d9;
+}
+
+.shell-error .shell-content {
+  color: #f85149;
+}
+
+.shell-input-line {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.shell-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #c9d1d9;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  padding: 2px 0;
+}
+
+.shell-input::placeholder {
+  color: #8b949e;
+}
+
+.shell-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
