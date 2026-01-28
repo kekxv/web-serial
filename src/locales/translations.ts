@@ -55,6 +55,12 @@ export const translations = {
     noCommands: '暂无常用命令',
     typeText: '文本',
     typeHex: 'HEX',
+    statistics: '数据统计',
+    rx: '接收 (RX)',
+    tx: '发送 (TX)',
+    reset: '重置',
+    bytes: '字节',
+    frameTimeout: '分帧超时 (ms)',
   },
   en: {
     title: 'Web Serial Assistant',
@@ -112,6 +118,12 @@ export const translations = {
     noCommands: 'No common commands',
     typeText: 'Text',
     typeHex: 'HEX',
+    statistics: 'Statistics',
+    rx: 'RX',
+    tx: 'TX',
+    reset: 'Reset',
+    bytes: 'Bytes',
+    frameTimeout: 'Frame Timeout (ms)',
   }
 }
 

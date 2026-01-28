@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import SerialPortManager from './services/SerialPortManager'
 import BluetoothManager from './services/BluetoothManager'
 import Terminal, { type TerminalMessage } from './components/Terminal'
@@ -37,11 +37,20 @@ function App() {
   const [hexMode, setHexMode] = useState(false)
   const [shellMode, setShellMode] = useState(false)
   const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>('utf-8')
+  const [frameTimeout, setFrameTimeout] = useState(5) // 默认 5ms 分帧超时
   const [darkMode, setDarkMode] = useState(() => 
     window.matchMedia('(prefers-color-scheme: dark)').matches
   )
   const [messages, setMessages] = useState<TerminalMessage[]>([])
   const [sendData, setSendData] = useState('')
+  
+  // 统计数据
+  const [rxCount, setRxCount] = useState(0)
+  const [txCount, setTxCount] = useState(0)
+
+  // 2. Refs 用于分帧合并
+  const rxFrameBuffer = useRef<number[]>([])
+  const rxFrameTimer = useRef<number | null>(null)
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     baudRate: 115200,
@@ -57,7 +66,7 @@ function App() {
     filterType: 'name'
   })
 
-  // 2. 副作用处理
+  // 3. 副作用处理
   useEffect(() => {
     localStorage.setItem('app_lang', lang)
   }, [lang])
@@ -74,16 +83,24 @@ function App() {
     document.body.classList.toggle('light-theme', !darkMode)
   }, [darkMode])
 
-  // 3. 回调函数
-  const addMessage = (data: string, direction: 'rx' | 'tx') => {
+  // 4. 回调函数
+  const addMessage = useCallback((data: string, direction: 'rx' | 'tx') => {
     const newMessage: TerminalMessage = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
       timestamp: new Date().toLocaleTimeString(),
       data,
       direction,
     }
     setMessages((prev) => [...prev, newMessage])
-  }
+  }, [])
+
+  const flushRxFrame = useCallback(() => {
+    if (rxFrameBuffer.current.length === 0) return
+    const data = new Uint8Array(rxFrameBuffer.current)
+    rxFrameBuffer.current = []
+    const decoder = new TextDecoder(encoding)
+    addMessage(decoder.decode(data), 'rx')
+  }, [encoding, addMessage])
 
   const handleClear = () => {
     setMessages([])
@@ -92,33 +109,67 @@ function App() {
     }
   }
 
+  const resetStats = () => {
+    setRxCount(0)
+    setTxCount(0)
+  }
+
   useEffect(() => {
+    const onDataHandler = (data: Uint8Array, direction: 'rx' | 'tx') => {
+      // 统计和 Shell 模式始终立即更新
+      if (direction === 'rx') {
+        setRxCount(prev => prev + data.length)
+        if (window.shellTerminal) window.shellTerminal.write(data)
+      } else {
+        setTxCount(prev => prev + data.length)
+      }
+
+      // 如果在 Shell 模式，终端列表不显示数据，由 Shell 自身渲染
+      if (shellMode) return
+
+      if (direction === 'rx') {
+        if (frameTimeout > 0) {
+          // 分帧逻辑：重置定时器，累加缓冲区
+          if (rxFrameTimer.current) window.clearTimeout(rxFrameTimer.current)
+          rxFrameBuffer.current.push(...Array.from(data))
+          rxFrameTimer.current = window.setTimeout(() => {
+            flushRxFrame()
+            rxFrameTimer.current = null
+          }, frameTimeout)
+        } else {
+          // 实时模式
+          const decoder = new TextDecoder(encoding)
+          addMessage(decoder.decode(data), 'rx')
+        }
+      } else {
+        // 发送数据直接显示
+        const decoder = new TextDecoder(encoding)
+        addMessage(decoder.decode(data), 'tx')
+      }
+    }
+
     SerialPortManager.onData((data, direction) => {
-      if (connectionType !== 'serial') return
-      const decoder = new TextDecoder(encoding)
-      const text = decoder.decode(data)
-      addMessage(text, direction)
-      if (window.shellTerminal && direction === 'rx') window.shellTerminal.write(data)
+      if (connectionType === 'serial') onDataHandler(data, direction)
+    })
+
+    BluetoothManager.onData((data, direction) => {
+      if (connectionType === 'bluetooth') onDataHandler(data, direction)
     })
 
     SerialPortManager.onStatusChange((status) => {
       if (connectionType === 'serial') setConnected(status)
     })
 
-    BluetoothManager.onData((data, direction) => {
-      if (connectionType !== 'bluetooth') return
-      const decoder = new TextDecoder(encoding)
-      const text = decoder.decode(data)
-      addMessage(text, direction)
-      if (window.shellTerminal && direction === 'rx') window.shellTerminal.write(data)
-    })
-
     BluetoothManager.onStatusChange((status) => {
       if (connectionType === 'bluetooth') setConnected(status)
     })
-  }, [encoding, connectionType])
 
-  // 4. 业务逻辑
+    return () => {
+      if (rxFrameTimer.current) window.clearTimeout(rxFrameTimer.current)
+    }
+  }, [encoding, connectionType, frameTimeout, shellMode, flushRxFrame, addMessage])
+
+  // 5. 业务逻辑
   const connectSerial = async () => {
     if (!SerialPortManager.isSupported()) {
       alert(t.notSupportedSerial)
@@ -156,12 +207,10 @@ function App() {
     const rawData = customData !== undefined ? customData : sendData
     if (!rawData.trim()) return
     
-    // 决定是否使用 HEX 模式 (如果 customType 存在则优先使用)
     const isHex = customType ? (customType === 'hex') : hexMode
 
     let dataToSend: string | Uint8Array = rawData
     if (isHex) {
-      // 兼容 0x 前缀，移除空格和 0x
       const cleanHex = rawData.replace(/\s+/g, '').replace(/0x/gi, '')
       if (!/^[0-9A-Fa-f]{2,}$/.test(cleanHex)) {
         alert(t.inputHex)
@@ -244,7 +293,7 @@ function App() {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-bluetooth"></i> {t.bleConfig}</div>
               <div className="form-group mb-3"><label>{t.filterType}</label>
-                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' }) }>
+                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' })}> 
                   <option value="name">{t.byName}</option><option value="service">{t.byService}</option><option value="all">{t.showAll}</option>
                 </select>
               </div>
@@ -262,6 +311,9 @@ function App() {
             <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="hexMode" checked={hexMode} onChange={(e) => setHexMode(e.target.checked)} /><label className="form-check-label" htmlFor="hexMode">{t.hexMode}</label></div>
             <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="shellMode" checked={shellMode} onChange={(e) => setShellMode(e.target.checked)} /><label className="form-check-label" htmlFor="shellMode">{t.shellMode}</label></div>
             <div className="form-group mb-2"><label>{t.encoding}</label><select className="form-select" value={encoding} onChange={(e) => setEncoding(e.target.value as 'utf-8' | 'gbk')}><option value="utf-8">UTF-8</option><option value="gbk">GBK</option></select></div>
+            <div className="form-group mb-2"><label>{t.frameTimeout}</label>
+              <input type="number" className="form-control form-control-sm" value={frameTimeout} onChange={e => setFrameTimeout(Math.max(0, Number(e.target.value)))} />
+            </div>
             <div className="form-check"><input type="checkbox" className="form-check-input" id="darkMode" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} /><label className="form-check-label" htmlFor="darkMode">{t.darkMode} ({darkMode ? t.auto : t.light})</label></div>
           </div>
 
@@ -302,7 +354,14 @@ function App() {
           </div>
         </section>
       </main>
-      <footer className="app-footer"><small className="text-muted">Web Serial Assistant v1.0 | Web Serial & Web Bluetooth</small></footer>
+      <footer className="app-footer">
+        <div className="footer-stats">
+          <span className="me-3">{t.rx}: <strong className="text-success">{rxCount}</strong> {t.bytes}</span>
+          <span className="me-3">{t.tx}: <strong className="text-primary">{txCount}</strong> {t.bytes}</span>
+          <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={resetStats}>{t.reset}</button>
+        </div>
+        <small className="text-muted">Web Serial Assistant v1.0 | Web Serial & Web Bluetooth</small>
+      </footer>
     </div>
   )
 }
