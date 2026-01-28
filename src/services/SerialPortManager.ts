@@ -54,8 +54,8 @@ class SerialPortManager {
 
       await this.port.open({
         baudRate: config.baudRate,
-        dataBits: config.dataBits || 8,
-        stopBits: config.stopBits || 1,
+        dataBits: (config.dataBits || 8) as 7 | 8,
+        stopBits: (config.stopBits || 1) as 1 | 2,
         parity: config.parity || 'none',
         bufferSize: config.bufferSize || 255,
         flowControl: config.flowControl || 'none',

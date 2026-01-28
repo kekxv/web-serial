@@ -37,7 +37,7 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
     
     session.on('offer', (offer: ZModem.ZModemOffer) => {
       offer.accept().then((contents: Uint8Array[]) => {
-        const blob = new Blob(contents, { type: 'application/octet-stream' })
+        const blob = new Blob(contents as BlobPart[], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
