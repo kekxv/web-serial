@@ -2,105 +2,51 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #0d1117;
+  background-color: #0c0c0c;
+  color: #cccccc;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #30363d;
+  border: 1px solid #333;
 }
 
 .shell-terminal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  padding: 8px 16px;
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #333;
 }
 
-.shell-terminal-header h6 {
-  color: #c9d1d9;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.shell-terminal-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.shell-terminal-content {
+.xterm-wrapper {
   flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  font-family: 'Fira Code', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  padding: 8px;
+  overflow: hidden;
 }
 
-.shell-line {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 4px;
-  line-height: 1.5;
+/* 覆盖 xterm 默认样式以适应容器 */
+.xterm {
+  padding: 4px;
+  height: 100%;
 }
 
-.shell-prompt {
-  display: inline-flex;
-  align-items: center;
-  margin-right: 8px;
-  color: #58a6ff;
-  flex-shrink: 0;
+.xterm-viewport {
+  background-color: #0c0c0c !important;
 }
 
-.shell-prompt i {
-  margin-right: 4px;
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
 }
 
-.prompt-active {
-  color: #3fb950;
-  font-weight: bold;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #1e1e1e;
 }
 
-.prompt-inactive {
-  color: #8b949e;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
 }
 
-.shell-content {
-  word-break: break-all;
-  white-space: pre-wrap;
-}
-
-.shell-input shell-content,
-.shell-output .shell-content {
-  color: #c9d1d9;
-}
-
-.shell-error .shell-content {
-  color: #f85149;
-}
-
-.shell-input-line {
-  display: flex;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.shell-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: #c9d1d9;
-  font-family: inherit;
-  font-size: 13px;
-  outline: none;
-  padding: 2px 0;
-}
-
-.shell-input::placeholder {
-  color: #8b949e;
-}
-
-.shell-input:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }

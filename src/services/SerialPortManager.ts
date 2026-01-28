@@ -11,11 +11,9 @@ export interface SerialConfig {
 }
 
 class SerialPortManager {
-  private port: any = null
-  private reader: ReadableStreamDefaultReader<string> | null = null
-  private writer: WritableStreamDefaultWriter<string> | null = null
-  private readableStreamClosed: Promise<void> | null = null
-  private writableStreamClosed: Promise<void> | null = null
+  private port: SerialPort | null = null
+  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+  private writer: WritableStreamDefaultWriter<Uint8Array> | null = null
   private dataCallback: PortDataCallback | null = null
   private statusCallback: PortStatusCallback | null = null
   private reading = false
@@ -40,6 +38,7 @@ class SerialPortManager {
   // 设置状态回调
   onStatusChange(callback: PortStatusCallback): void {
     this.statusCallback = callback
+    callback(this.isConnected())
   }
 
   // 连接串口
@@ -49,11 +48,11 @@ class SerialPortManager {
         throw new Error('Web Serial API is not supported')
       }
 
-      if (this.port && this.port.readable) {
+      if (this.port) {
         await this.disconnect()
       }
 
-      this.port = await (navigator as any).serial.requestPort()
+      this.port = await navigator.serial.requestPort()
 
       await this.port.open({
         baudRate: config.baudRate,
@@ -64,16 +63,11 @@ class SerialPortManager {
         flowControl: config.flowControl || 'none',
       })
 
-      const textEncoder = new TextEncoderStream()
-      const textDecoder = new TextDecoderStream()
-      this.writableStreamClosed = textEncoder.readable.pipeTo(this.port.writable)
-      this.writer = textEncoder.writable.getWriter()
-
-      this.readableStreamClosed = this.port.readable.pipeTo(textDecoder.writable)
-      this.reader = textDecoder.readable.getReader()
+      this.writer = this.port.writable.getWriter()
+      this.reader = this.port.readable.getReader()
 
       this.keepReading = true
-      await this.startReading()
+      this.startReading()
 
       this.statusCallback?.(true)
       return true
@@ -96,9 +90,7 @@ class SerialPortManager {
           break
         }
         if (value) {
-          const encoder = new TextEncoder()
-          const uint8Array = encoder.encode(value)
-          this.dataCallback?.(uint8Array, 'rx')
+          this.dataCallback?.(value, 'rx')
         }
       }
     } catch (error) {
@@ -113,10 +105,9 @@ class SerialPortManager {
     if (!this.writer) return false
 
     try {
-      const text = typeof data === 'string' ? data : new TextDecoder().decode(data)
-      await this.writer.write(text)
-      
       const uint8Array = typeof data === 'string' ? new TextEncoder().encode(data) : data
+      await this.writer.write(uint8Array)
+      
       this.dataCallback?.(uint8Array, 'tx')
       return true
     } catch (error) {
@@ -137,17 +128,8 @@ class SerialPortManager {
 
     if (this.writer) {
       await this.writer.close().catch(() => {})
+      this.writer.releaseLock()
       this.writer = null
-    }
-
-    if (this.readableStreamClosed) {
-      await this.readableStreamClosed.catch(() => {})
-      this.readableStreamClosed = null
-    }
-
-    if (this.writableStreamClosed) {
-      await this.writableStreamClosed.catch(() => {})
-      this.writableStreamClosed = null
     }
 
     if (this.port) {
@@ -160,7 +142,7 @@ class SerialPortManager {
 
   // 获取连接状态
   isConnected(): boolean {
-    return this.port !== null && this.port.readable !== undefined
+    return this.port !== null
   }
 
   // 清理

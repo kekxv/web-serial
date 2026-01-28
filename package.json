@@ -11,10 +11,15 @@
   },
   "dependencies": {
     "@types/bootstrap": "^5.2.10",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "zmodem.js": "^0.1.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

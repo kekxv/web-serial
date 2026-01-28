@@ -1,192 +1,193 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import * as ZModem from 'zmodem.js'
+import '@xterm/xterm/css/xterm.css'
 import './ShellTerminal.css'
-
-export interface ShellLine {
-  id: string
-  type: 'input' | 'output' | 'error'
-  content: string
-  timestamp?: string
-}
 
 interface ShellTerminalProps {
   connected: boolean
-  hexMode: boolean
-  onCommand: (command: string) => void
+  onData: (data: Uint8Array) => void
   onClear?: () => void
 }
 
 const ShellTerminal: React.FC<ShellTerminalProps> = ({
   connected,
-  hexMode,
-  onCommand,
+  onData,
   onClear,
 }) => {
-  const [lines, setLines] = useState<ShellLine[]>([
-    {
-      id: 'welcome',
-      type: 'output',
-      content: 'Web Serial Terminal v1.0\n输入 help 查看可用命令\n',
-    },
-  ])
-  const [input, setInput] = useState('')
-  const [history, setHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
   const terminalRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const xtermRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const sentryRef = useRef<any>(null)
+  const sessionRef = useRef<any>(null)
+  const onDataRef = useRef(onData)
 
+  // 更新 ref
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
-    }
-  }, [lines])
+    onDataRef.current = onData
+  }, [onData])
 
-  useEffect(() => {
-    if (connected && inputRef.current) {
-      inputRef.current.focus()
-    }
-  }, [connected])
+  // 对应 sz：远程发送，本地接收
+  const handleZmodemSend = async (session: any) => {
+    console.log('ZMODEM Send Session started (receiving file from device)')
+    
+    session.on('offer', (offer: any) => {
+      offer.accept().then((contents: any) => {
+        const blob = new Blob(contents, { type: 'application/octet-stream' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = offer.get_details().name
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+    })
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInput(e.target.value)
+    session.on('session_end', () => {
+      sessionRef.current = null
+      console.log('ZMODEM session ended')
+    })
+
+    session.start()
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleExecute()
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      navigateHistory(-1)
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      navigateHistory(1)
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-    }
-  }
+  // 对应 rz：远程接收，本地发送
+  const handleZmodemReceive = async (session: any) => {
+    console.log('ZMODEM Receive Session started (sending file to device)')
 
-  const navigateHistory = (direction: number) => {
-    const newIndex = historyIndex + direction
-    if (newIndex >= -1 && newIndex < history.length) {
-      setHistoryIndex(newIndex)
-      if (newIndex === -1) {
-        setInput('')
-      } else {
-        setInput(history[history.length - 1 - newIndex])
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0]
+      if (!file) {
+        session.skip()
+        return
       }
+
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const buffer = reader.result as ArrayBuffer
+        const uint8Array = new Uint8Array(buffer)
+        
+        ZModem.Browser.send_files(session, [
+          {
+            name: file.name,
+            size: file.size,
+            mtime: new Date(file.lastModified),
+            content: uint8Array,
+          }
+        ]).then(() => {
+          session.close()
+        })
+      }
+      reader.readAsArrayBuffer(file)
     }
+    input.click()
+
+    session.on('session_end', () => {
+      sessionRef.current = null
+      console.log('ZMODEM session ended')
+    })
+
+    session.start()
   }
 
-  const handleExecute = () => {
-    if (!input.trim()) {
-      return
-    }
-
-    const command = input.trim()
-    setHistory([...history, command])
-    setHistoryIndex(-1)
-
-    addLine(command, 'input')
-    setInput('')
-
-    // 处理内置命令
-    if (command.toLowerCase() === 'help') {
-      addLine('可用命令:', 'output')
-      addLine('  help    - 显示帮助信息', 'output')
-      addLine('  clear   - 清空终端', 'output')
-      addLine('  version - 显示版本信息', 'output')
-      addLine('  echo    - 回显测试', 'output')
-      addLine('  status  - 显示连接状态', 'output')
-      addLine('', 'output')
-    } else if (command.toLowerCase() === 'clear') {
-      setLines([])
-    } else if (command.toLowerCase() === 'version') {
-      addLine('Web Serial Terminal v1.0.0', 'output')
-      addLine('Built with React + TypeScript', 'output')
-    } else if (command.toLowerCase() === 'echo') {
-      addLine('Echo test successful!', 'output')
-    } else if (command.toLowerCase() === 'status') {
-      addLine(`连接状态: ${connected ? '已连接' : '未连接'}`, 'output')
-      addLine(`HEX 模式: ${hexMode ? '开启' : '关闭'}`, 'output')
-    } else {
-      // 发送给串口
-      onCommand(command)
-    }
-  }
-
-  const addLine = (content: string, type: ShellLine['type']) => {
-    const newLine: ShellLine = {
-      id: Date.now().toString(),
-      type,
-      content,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-    setLines([...lines, newLine])
-  }
-
-  const addOutputLine = (content: string) => {
-    addLine(content, 'output')
-  }
-
-  const addErrorLine = (content: string) => {
-    addLine(content, 'error')
-  }
-
-  // 暴露方法给父组件
   useEffect(() => {
+    if (!terminalRef.current) return
+
+    // 初始化 Xterm
+    const term = new Terminal({
+      cursorBlink: true,
+      theme: {
+        background: '#0c0c0c',
+        foreground: '#00ff00',
+      },
+      fontFamily: 'Monaco, Menlo, "Ubuntu Mono", Consolas, monospace',
+      fontSize: 14,
+    })
+
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.open(terminalRef.current)
+    fitAddon.fit()
+
+    xtermRef.current = term
+    fitAddonRef.current = fitAddon
+
+    // 初始化 ZMODEM Sentry
+    const sentry = new ZModem.Sentry({
+      to_terminal: (data: number[]) => {
+        term.write(new Uint8Array(data))
+      },
+      sender: (data: number[]) => {
+        onDataRef.current(new Uint8Array(data))
+      },
+      on_detect: (detection: any) => {
+        const zsession = detection.confirm()
+        sessionRef.current = zsession
+
+        if (zsession.type === 'send') {
+          handleZmodemSend(zsession)
+        } else {
+          handleZmodemReceive(zsession)
+        }
+      },
+      on_retract: () => {
+        console.log('ZMODEM retracted')
+      },
+    })
+    sentryRef.current = sentry
+
+    // 监听输入
+    term.onData((data) => {
+      if (sessionRef.current) return
+      const encoder = new TextEncoder()
+      onDataRef.current(encoder.encode(data))
+    })
+
+    // 处理窗口大小变化
+    const handleResize = () => fitAddon.fit()
+    window.addEventListener('resize', handleResize)
+
+    // 暴露方法给父组件
     ;(window as any).shellTerminal = {
-      addOutputLine,
-      addErrorLine,
+      write: (data: Uint8Array) => {
+        if (sessionRef.current) {
+          sessionRef.current.consume(data)
+        } else {
+          sentry.consume(data)
+        }
+      },
+      clear: () => term.clear()
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      term.dispose()
     }
   }, [])
+
+  useEffect(() => {
+    if (connected && xtermRef.current) {
+      xtermRef.current.focus()
+    }
+  }, [connected])
 
   return (
     <div className="shell-terminal-container">
       <div className="shell-terminal-header">
         <h6 className="mb-0">
           <i className="bi bi-terminal-fill me-2"></i>
-          Shell
+          Xterm.js Console (Supports sz/rz)
         </h6>
         <div className="shell-terminal-actions">
-          <button
-            className="btn btn-sm btn-outline-danger"
-            onClick={onClear}
-            title="清空"
-          >
+          <button className="btn btn-sm btn-outline-danger" onClick={() => { xtermRef.current?.clear(); onClear?.(); }} title="清空">
             <i className="bi bi-trash"></i>
           </button>
         </div>
       </div>
-      <div ref={terminalRef} className="shell-terminal-content custom-scrollbar">
-        {lines.map((line) => (
-          <div key={line.id} className={`shell-line shell-${line.type}`}>
-            {line.type === 'input' && (
-              <span className="shell-prompt">
-                <i className="bi bi-arrow-right-circle-fill"></i>
-              </span>
-            )}
-            <span className="shell-content">{line.content}</span>
-          </div>
-        ))}
-        <div className="shell-input-line">
-          <span className="shell-prompt">
-            <span className={connected ? 'prompt-active' : 'prompt-inactive'}>
-              {connected ? '$' : '(未连接)'}
-            </span>
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            className="shell-input"
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={connected ? '输入命令...' : '请先连接串口'}
-            disabled={!connected}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-      </div>
+      <div ref={terminalRef} className="xterm-wrapper" />
     </div>
   )
 }

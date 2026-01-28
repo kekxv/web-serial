@@ -17,6 +17,8 @@ interface SerialConfig {
 interface BluetoothConfig {
   serviceUUID: string
   characteristicUUID: string
+  namePrefix: string
+  filterType: 'service' | 'name' | 'all'
 }
 
 function App() {
@@ -24,6 +26,8 @@ function App() {
   const [connected, setConnected] = useState(false)
   const [hexMode, setHexMode] = useState(false)
   const [shellMode, setShellMode] = useState(false)
+  const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>('utf-8')
+  const [darkMode, setDarkMode] = useState(true)
   const [messages, setMessages] = useState<TerminalMessage[]>([])
   const [sendData, setSendData] = useState('')
 
@@ -37,45 +41,22 @@ function App() {
 
   // 蓝牙配置
   const [bluetoothConfig, setBluetoothConfig] = useState<BluetoothConfig>({
-    serviceUUID: '0000ffe0-0000-1000-8000-00805f9b34fb', // 典型 BLE UART 服务
-    characteristicUUID: '0000ffe1-0000-1000-8000-00805f9b34fb', // 典型 BLE UART 特征
+    serviceUUID: '0xfff0', 
+    characteristicUUID: '0xfff1',
+    namePrefix: 'KT',
+    filterType: 'name'
   })
 
+  // 监听系统主题变化
   useEffect(() => {
-    // 设置串口数据回调
-    SerialPortManager.onData((data, direction) => {
-      const text = new TextDecoder().decode(data)
-      addMessage(text, direction)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    setDarkMode(mediaQuery.matches)
 
-      // Shell 模式下添加到终端
-      if ((window as any).shellTerminal) {
-        if (direction === 'rx') {
-          (window as any).shellTerminal.addOutputLine(hexMode ?
-            Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ').toUpperCase() :
-            text)
-        }
-      }
-    })
+    const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches)
+    mediaQuery.addEventListener('change', handler)
 
-    SerialPortManager.onStatusChange(setConnected)
-
-    // 设置蓝牙数据回调
-    BluetoothManager.onData((data, direction) => {
-      const text = new TextDecoder().decode(data)
-      addMessage(text, direction)
-
-      // Shell 模式下添加到终端
-      if ((window as any).shellTerminal) {
-        if (direction === 'rx') {
-          (window as any).shellTerminal.addOutputLine(hexMode ?
-            Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ').toUpperCase() :
-            text)
-        }
-      }
-    })
-
-    BluetoothManager.onStatusChange(setConnected)
-  }, [hexMode])
+    return () => mediaQuery.removeEventListener('change', handler)
+  }, [])
 
   const addMessage = (data: string, direction: 'rx' | 'tx') => {
     const newMessage: TerminalMessage = {
@@ -87,11 +68,72 @@ function App() {
     setMessages((prev) => [...prev, newMessage])
   }
 
+  useEffect(() => {
+    // 设置串口数据回调
+    SerialPortManager.onData((data, direction) => {
+      if (connectionType !== 'serial') return
+      
+      // 不管什么模式都记录到 messages (Terminal 组件)
+      const decoder = new TextDecoder(encoding)
+      const text = decoder.decode(data)
+      addMessage(text, direction)
+
+      // Shell 模式下通过 window.shellTerminal.write 写入
+      if ((window as any).shellTerminal) {
+        if (direction === 'rx') {
+          (window as any).shellTerminal.write(data)
+        }
+      }
+    })
+
+    SerialPortManager.onStatusChange((status) => {
+      if (connectionType === 'serial') {
+        setConnected(status)
+      }
+    })
+
+    // 设置蓝牙数据回调
+    BluetoothManager.onData((data, direction) => {
+      if (connectionType !== 'bluetooth') return
+      const decoder = new TextDecoder(encoding)
+      const text = decoder.decode(data)
+      addMessage(text, direction)
+
+      // Shell 模式
+      if ((window as any).shellTerminal) {
+        if (direction === 'rx') {
+          (window as any).shellTerminal.write(data)
+        }
+      }
+    })
+
+    BluetoothManager.onStatusChange((status) => {
+      if (connectionType === 'bluetooth') {
+        setConnected(status)
+      }
+    })
+  }, [hexMode, encoding, connectionType])
+
+  // 应用主题变化
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.remove('light-theme')
+      document.body.classList.add('dark-theme')
+    } else {
+      document.body.classList.remove('dark-theme')
+      document.body.classList.add('light-theme')
+    }
+  }, [darkMode])
+
   const connectSerial = async () => {
-    setConnectionType('serial')
+    if (!SerialPortManager.isSupported()) {
+      alert('当前浏览器不支持 Web Serial API')
+      return
+    }
     const success = await SerialPortManager.connect(serialConfig)
-    if (!success) {
-      setConnectionType('none')
+    if (success) {
+      setConnectionType('serial')
+    } else {
       alert('连接串口失败')
     }
   }
@@ -101,10 +143,22 @@ function App() {
       alert('当前浏览器不支持 Web Bluetooth API')
       return
     }
-    setConnectionType('bluetooth')
-    const success = await BluetoothManager.connect(bluetoothConfig)
-    if (!success) {
-      setConnectionType('none')
+    
+    const config: any = {
+      serviceUUID: bluetoothConfig.serviceUUID,
+      characteristicUUID: bluetoothConfig.characteristicUUID,
+    }
+
+    if (bluetoothConfig.filterType === 'all') {
+      config.acceptAllDevices = true
+    } else if (bluetoothConfig.filterType === 'name') {
+      config.namePrefix = bluetoothConfig.namePrefix
+    }
+
+    const success = await BluetoothManager.connect(config)
+    if (success) {
+      setConnectionType('bluetooth')
+    } else {
       alert('连接蓝牙设备失败')
     }
   }
@@ -154,28 +208,24 @@ function App() {
     }
   }
 
-  const handleShellCommand = async (command: string) => {
-    if (!command.trim()) return
-
-    const data = hexMode ?
-      // HEX 模式：命令的 HEX 表示
-      command.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ') :
-      command + '\n'
-
+  const handleShellData = async (data: Uint8Array) => {
     let success = false
     if (connectionType === 'serial') {
-      success = await SerialPortManager.send(hexMode ? data : command + '\n')
+      success = await SerialPortManager.send(data)
     } else if (connectionType === 'bluetooth') {
-      success = await BluetoothManager.send(hexMode ? data : command + '\n')
+      success = await BluetoothManager.send(data)
     }
 
     if (!success) {
-      alert('发送命令失败')
+      console.error('Failed to send data to TTY')
     }
   }
 
   const handleClear = () => {
     setMessages([])
+    if ((window as any).shellTerminal) {
+      (window as any).shellTerminal.clear()
+    }
   }
 
   const handleCopy = () => {
@@ -208,15 +258,15 @@ function App() {
             <div className="btn-group w-100" role="group">
               <button
                 className={`btn ${connectionType === 'serial' ? 'btn-primary' : 'btn-outline-primary'}`}
-                onClick={connectSerial}
-                disabled={connected && connectionType !== 'serial'}
+                onClick={() => !connected && setConnectionType('serial')}
+                disabled={connected}
               >
                 <i className="bi bi-usb"></i> 串口
               </button>
               <button
                 className={`btn ${connectionType === 'bluetooth' ? 'btn-primary' : 'btn-outline-primary'}`}
-                onClick={connectBluetooth}
-                disabled={connected && connectionType !== 'bluetooth'}
+                onClick={() => !connected && setConnectionType('bluetooth')}
+                disabled={connected}
               >
                 <i className="bi bi-bluetooth"></i> BLE
               </button>
@@ -228,6 +278,7 @@ function App() {
               <div className="section-title">
                 <i className="bi bi-gear"></i> 串口配置
               </div>
+              {/* ... (串口配置表单保持不变) ... */}
               <div className="form-group mb-3">
                 <label>波特率</label>
                 <select
@@ -281,6 +332,12 @@ function App() {
                   <option value="odd">Odd</option>
                 </select>
               </div>
+
+              {!connected && (
+                <button className="btn btn-success w-100" onClick={connectSerial}>
+                  <i className="bi bi-plug"></i> 打开串口
+                </button>
+              )}
             </div>
           )}
 
@@ -290,25 +347,58 @@ function App() {
                 <i className="bi bi-bluetooth"></i> BLE 配置
               </div>
               <div className="form-group mb-3">
-                <label>服务 UUID</label>
+                <label>筛选方式</label>
+                <select
+                  className="form-select"
+                  value={bluetoothConfig.filterType}
+                  onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as any })}
+                >
+                  <option value="name">按名称前缀</option>
+                  <option value="service">按服务 UUID</option>
+                  <option value="all">显示所有设备</option>
+                </select>
+              </div>
+              
+              {bluetoothConfig.filterType === 'name' && (
+                <div className="form-group mb-3">
+                  <label>名称前缀</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={bluetoothConfig.namePrefix}
+                    onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, namePrefix: e.target.value })}
+                    placeholder="例如: KT"
+                  />
+                </div>
+              )}
+
+              <div className="form-group mb-3">
+                <label>服务 UUID (Service)</label>
                 <input
                   type="text"
                   className="form-control"
                   value={bluetoothConfig.serviceUUID}
                   onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, serviceUUID: e.target.value })}
-                  placeholder="例如: 0000ffe0-0000-1000-8000-00805f9b34fb"
+                  placeholder="例如: 0xfff0"
                 />
               </div>
+
               <div className="form-group mb-3">
-                <label>特征 UUID</label>
+                <label>特征 UUID (Characteristic)</label>
                 <input
                   type="text"
                   className="form-control"
                   value={bluetoothConfig.characteristicUUID}
                   onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, characteristicUUID: e.target.value })}
-                  placeholder="例如: 0000ffe1-0000-1000-8000-00805f9b34fb"
+                  placeholder="例如: 0xfff1"
                 />
               </div>
+
+              {!connected && (
+                <button className="btn btn-success w-100" onClick={connectBluetooth}>
+                  <i className="bi bi-search"></i> 搜索并连接
+                </button>
+              )}
             </div>
           )}
 
@@ -328,7 +418,7 @@ function App() {
                 HEX 模式
               </label>
             </div>
-            <div className="form-check">
+            <div className="form-check mb-2">
               <input
                 type="checkbox"
                 className="form-check-input"
@@ -338,6 +428,29 @@ function App() {
               />
               <label className="form-check-label" htmlFor="shellMode">
                 Shell 模式
+              </label>
+            </div>
+            <div className="form-group mb-2">
+              <label className="form-label">字符编码</label>
+              <select
+                className="form-select"
+                value={encoding}
+                onChange={(e) => setEncoding(e.target.value as 'utf-8' | 'gbk')}
+              >
+                <option value="utf-8">UTF-8</option>
+                <option value="gbk">GBK</option>
+              </select>
+            </div>
+            <div className="form-check">
+              <input
+                type="checkbox"
+                className="form-check-input"
+                id="darkMode"
+                checked={darkMode}
+                onChange={(e) => setDarkMode(e.target.checked)}
+              />
+              <label className="form-check-label" htmlFor="darkMode">
+                深色主题 ({darkMode ? '自动' : '浅色'})
               </label>
             </div>
           </div>
@@ -383,8 +496,7 @@ function App() {
           {shellMode ? (
             <ShellTerminal
               connected={connected}
-              hexMode={hexMode}
-              onCommand={handleShellCommand}
+              onData={handleShellData}
               onClear={handleClear}
             />
           ) : (
