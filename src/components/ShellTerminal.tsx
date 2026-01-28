@@ -35,7 +35,8 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
   const handleZmodemSend = async (session: ZModem.ZModemSession) => {
     console.log('ZMODEM Send Session started (receiving file from device)')
     
-    session.on('offer', (offer: ZModem.ZModemOffer) => {
+    session.on('offer', (arg: unknown) => {
+      const offer = arg as ZModem.ZModemOffer
       offer.accept().then((contents: Uint8Array[]) => {
         const blob = new Blob(contents as BlobPart[], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
