@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# Web Serial Assistant
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个基于浏览器的串口和蓝牙调试助手，支持 TTY 终端交互及 ZMODEM 文件传输。
 
-Currently, two official plugins are available:
+## 🚀 核心特性
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Web Serial 支持**：直接与本地串口设备通信，支持波特率、数据位、停止位及校验位配置。
+- **Web Bluetooth 支持**：支持 BLE 设备的搜索与连接，内置常用 UART 服务支持（如 FFE0, FFF0），支持名称前缀筛选。
+- **专业 TTY 终端**：集成 Xterm.js 渲染，提供类似 Linux 终端的即时字符交互体验。
+- **ZMODEM 协议 (sz/rz)**：支持通过串口/蓝牙进行文件双向传输，完美适配嵌入式开发场景。
+- **HEX 模式**：支持十六进制数据的发送与接收预览。
+- **跨平台**：无需安装驱动（取决于系统对 Web API 的支持），在 Chrome/Edge 浏览器中即可使用。
+- **现代技术栈**：基于 React 19 + TypeScript + Vite 构建，代码逻辑严谨，类型安全。
 
-## React Compiler
+## 🛠️ 技术栈
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React 19, TypeScript, Vite
+- **Terminal**: @xterm/xterm, @xterm/addon-fit
+- **Protocol**: zmodem.js
+- **UI Component**: Bootstrap 5 + Bootstrap Icons
+- **APIs**: Web Serial API, Web Bluetooth API
 
-## Expanding the ESLint configuration
+## 📦 快速开始
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 本地开发
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. **安装依赖**
+   ```bash
+   pnpm install
+   ```
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+2. **启动开发服务器**
+   ```bash
+   pnpm run dev
+   ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+3. **构建发布**
+   ```bash
+   pnpm run build
+   ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 📖 使用指南
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 蓝牙连接
+- 程序支持 16-bit UUID（如 `ffe0`）和标准 128-bit UUID。
+- 使用“名称前缀”过滤时，建议同时正确填写设备的服务 UUID，以确保连接成功后能正常发现通信特征。
+- 蓝牙发送已内置队列管理和分片逻辑（127 字节/包），有效防止 `GATT operation already in progress` 冲突。
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 文件传输 (sz/rz)
+- **sz (设备 -> 浏览器)**：在设备端执行 `sz filename`，浏览器将自动弹出下载提示。
+- **rz (浏览器 -> 设备)**：在设备端执行 `rz`，浏览器将自动弹出文件选择框，选择文件后即开始发送。
+
+## 📄 开源协议
+
+本项目采用 [MIT](LICENSE) 协议。
