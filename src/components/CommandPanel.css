@@ -1,0 +1,70 @@
+.command-panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--bs-body-bg);
+  border-left: 1px solid rgba(0,0,0,0.1);
+  width: 260px;
+}
+
+.dark-theme .command-panel-container {
+  border-left: 1px solid #333;
+}
+
+.command-panel-header {
+  padding: 12px 16px;
+  background-color: rgba(0,0,0,0.03);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dark-theme .command-panel-header {
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #333;
+}
+
+.command-panel-content {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.command-item {
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 6px;
+  background-color: rgba(0,0,0,0.01);
+  transition: all 0.2s;
+}
+
+.dark-theme .command-item {
+  border: 1px solid #333;
+  background-color: rgba(255,255,255,0.02);
+}
+
+.command-item:hover {
+  background-color: rgba(0,0,0,0.03);
+}
+
+.dark-theme .command-item:hover {
+  background-color: rgba(255,255,255,0.05);
+}
+
+.command-item-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.pointer {
+  cursor: pointer;
+}
+
+.command-edit-box {
+  padding: 10px;
+  border: 1px solid var(--bs-primary);
+  border-radius: 6px;
+  background-color: rgba(var(--bs-primary-rgb), 0.05);
+}

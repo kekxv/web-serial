@@ -3,6 +3,7 @@ import SerialPortManager from './services/SerialPortManager'
 import BluetoothManager from './services/BluetoothManager'
 import Terminal, { type TerminalMessage } from './components/Terminal'
 import ShellTerminal from './components/ShellTerminal'
+import CommandPanel from './components/CommandPanel'
 import { translations, type Language } from './locales/translations'
 import './App.css'
 
@@ -151,23 +152,38 @@ function App() {
     setConnected(false)
   }
 
-  const handleSend = async () => {
-    if (!sendData.trim()) return
-    let dataToSend: string | Uint8Array = sendData.trim()
-    if (hexMode) {
-      const cleanHex = sendData.trim().replace(/\s+/g, '')
+  const handleSend = async (customData?: string, customType?: 'text' | 'hex') => {
+    const rawData = customData !== undefined ? customData : sendData
+    if (!rawData.trim()) return
+    
+    // 决定是否使用 HEX 模式 (如果 customType 存在则优先使用)
+    const isHex = customType ? (customType === 'hex') : hexMode
+
+    let dataToSend: string | Uint8Array = rawData
+    if (isHex) {
+      // 兼容 0x 前缀，移除空格和 0x
+      const cleanHex = rawData.replace(/\s+/g, '').replace(/0x/gi, '')
       if (!/^[0-9A-Fa-f]{2,}$/.test(cleanHex)) {
         alert(t.inputHex)
         return
       }
       const length = (cleanHex.length / 2) | 0
       const result = new Uint8Array(length)
-      for (let i = 0; i < length; i++) result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
+      for (let i = 0; i < length; i++) {
+        result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
+      }
       dataToSend = result
     }
-    const success = connectionType === 'serial' ? await SerialPortManager.send(dataToSend) : await BluetoothManager.send(dataToSend)
-    if (!success) alert(t.sendFail)
-    else setSendData('')
+
+    const success = connectionType === 'serial' 
+      ? await SerialPortManager.send(dataToSend) 
+      : await BluetoothManager.send(dataToSend)
+
+    if (!success) {
+      alert(t.sendFail)
+    } else if (customData === undefined) {
+      setSendData('')
+    }
   }
 
   const handleShellData = async (data: Uint8Array) => {
@@ -206,8 +222,7 @@ function App() {
           {connectionType === 'serial' && (
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-gear"></i> {t.serialConfig}</div>
-              <div className="form-group mb-3">
-                <label>{t.baudRate}</label>
+              <div className="form-group mb-3"><label>{t.baudRate}</label>
                 <select className="form-select" value={serialConfig.baudRate} onChange={(e) => setSerialConfig({ ...serialConfig, baudRate: Number(e.target.value) }) }>
                   {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -216,8 +231,7 @@ function App() {
                 <div className="col-6"><label>{t.dataBits}</label><select className="form-select" value={serialConfig.dataBits} onChange={(e) => setSerialConfig({ ...serialConfig, dataBits: Number(e.target.value) })}>{[7, 8].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
                 <div className="col-6"><label>{t.stopBits}</label><select className="form-select" value={serialConfig.stopBits} onChange={(e) => setSerialConfig({ ...serialConfig, stopBits: Number(e.target.value) })}>{[1, 2].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
               </div>
-              <div className="form-group mb-3">
-                <label>{t.parity}</label>
+              <div className="form-group mb-3"><label>{t.parity}</label>
                 <select className="form-select" value={serialConfig.parity} onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as 'none' | 'even' | 'odd' }) }>
                   <option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option>
                 </select>
@@ -229,8 +243,7 @@ function App() {
           {connectionType === 'bluetooth' && (
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-bluetooth"></i> {t.bleConfig}</div>
-              <div className="form-group mb-3">
-                <label>{t.filterType}</label>
+              <div className="form-group mb-3"><label>{t.filterType}</label>
                 <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' }) }>
                   <option value="name">{t.byName}</option><option value="service">{t.byService}</option><option value="all">{t.showAll}</option>
                 </select>
@@ -256,7 +269,7 @@ function App() {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-send"></i> {t.sendData}</div>
               <div className="form-group mb-2"><textarea className="form-control send-area" value={sendData} onChange={(e) => setSendData(e.target.value)} placeholder={hexMode ? t.inputHex : t.inputText} rows={4} /></div>
-              <button className="btn btn-primary w-100" onClick={handleSend} disabled={!connected}><i className="bi bi-send"></i> {t.send}</button>
+              <button className="btn btn-primary w-100" onClick={() => handleSend()} disabled={!connected}><i className="bi bi-send"></i> {t.send}</button>
             </div>
           )}
 
@@ -264,22 +277,29 @@ function App() {
         </aside>
 
         <section className="terminal-panel">
-          {shellMode ? (
-            <ShellTerminal connected={connected} onData={handleShellData} onClear={handleClear} lang={lang} />
-          ) : (
-            <Terminal 
-              messages={messages} 
-              hexMode={hexMode} 
-              onClear={handleClear} 
-              onCopy={() => { 
-                const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n'); 
-                navigator.clipboard.writeText(text); 
-                alert(t.copied); 
-              }} 
-              autoScroll={true} 
-              lang={lang} 
-            />
-          )}
+          <div className="main-content-row h-100 d-flex">
+            <div className="flex-grow-1 h-100 overflow-hidden">
+              {shellMode ? (
+                <ShellTerminal connected={connected} onData={handleShellData} onClear={handleClear} lang={lang} />
+              ) : (
+                <Terminal 
+                  messages={messages} 
+                  hexMode={hexMode} 
+                  onClear={handleClear} 
+                  onCopy={() => { 
+                    const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n'); 
+                    navigator.clipboard.writeText(text); 
+                    alert(t.copied); 
+                  }} 
+                  autoScroll={true} 
+                  lang={lang} 
+                />
+              )}
+            </div>
+            {!shellMode && (
+              <CommandPanel onSend={(content, type) => handleSend(content, type)} lang={lang} connected={connected} />
+            )}
+          </div>
         </section>
       </main>
       <footer className="app-footer"><small className="text-muted">Web Serial Assistant v1.0 | Web Serial & Web Bluetooth</small></footer>

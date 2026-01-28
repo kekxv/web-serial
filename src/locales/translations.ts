@@ -45,6 +45,16 @@ export const translations = {
     auto: '自动',
     light: '浅色',
     language: '语言',
+    commonCommands: '常用命令',
+    addCommand: '添加命令',
+    commandName: '名称',
+    commandContent: '内容',
+    save: '保存',
+    delete: '删除',
+    edit: '编辑',
+    noCommands: '暂无常用命令',
+    typeText: '文本',
+    typeHex: 'HEX',
   },
   en: {
     title: 'Web Serial Assistant',
@@ -92,6 +102,16 @@ export const translations = {
     auto: 'Auto',
     light: 'Light',
     language: 'Language',
+    commonCommands: 'Common Commands',
+    addCommand: 'Add Command',
+    commandName: 'Name',
+    commandContent: 'Content',
+    save: 'Save',
+    delete: 'Delete',
+    edit: 'Edit',
+    noCommands: 'No common commands',
+    typeText: 'Text',
+    typeHex: 'HEX',
   }
 }
 
