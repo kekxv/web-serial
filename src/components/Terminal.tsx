@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { translations, type Language } from '../locales/translations'
 import './Terminal.css'
 
 export interface TerminalMessage {
@@ -14,6 +15,7 @@ interface TerminalProps {
   onClear?: () => void
   onCopy?: () => void
   autoScroll?: boolean
+  lang: Language
 }
 
 const Terminal: React.FC<TerminalProps> = ({
@@ -22,8 +24,10 @@ const Terminal: React.FC<TerminalProps> = ({
   onClear,
   onCopy,
   autoScroll = true,
+  lang,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
+  const t = translations[lang]
 
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
@@ -63,20 +67,20 @@ const Terminal: React.FC<TerminalProps> = ({
       <div className="terminal-header">
         <h6 className="mb-0">
           <i className="bi bi-terminal me-2"></i>
-          终端
+          {t.terminal}
         </h6>
         <div className="terminal-actions">
           <button
             className="btn btn-sm btn-outline-secondary me-2"
             onClick={onCopy}
-            title="复制全部"
+            title={t.copyAll}
           >
             <i className="bi bi-clipboard"></i>
           </button>
           <button
             className="btn btn-sm btn-outline-danger"
             onClick={onClear}
-            title="清空"
+            title={t.clear}
           >
             <i className="bi bi-trash"></i>
           </button>
@@ -86,7 +90,7 @@ const Terminal: React.FC<TerminalProps> = ({
         {messages.length === 0 ? (
           <div className="terminal-empty">
             <i className="bi bi-chat-quote"></i>
-            <p>暂无消息</p>
+            <p>{t.noMessages}</p>
           </div>
         ) : (
           messages.map((message) => (

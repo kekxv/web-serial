@@ -1,5 +1,7 @@
 # Web Serial Assistant
 
+[中文](README.md) | [English](#english)
+
 一个基于浏览器的串口和蓝牙调试助手，支持 TTY 终端交互及 ZMODEM 文件传输。
 
 ## 🚀 核心特性
@@ -12,44 +14,61 @@
 - **跨平台**：无需安装驱动（取决于系统对 Web API 的支持），在 Chrome/Edge 浏览器中即可使用。
 - **现代技术栈**：基于 React 19 + TypeScript + Vite 构建，代码逻辑严谨，类型安全。
 
-## 🛠️ 技术栈
+---
+
+<a name="english"></a>
+# Web Serial Assistant (English)
+
+A browser-based debugger for Serial and Bluetooth communication, featuring TTY terminal interaction and ZMODEM file transfers.
+
+## 🚀 Key Features
+
+- **Web Serial Support**: Communicate directly with local serial devices. Configurable baud rate, data bits, stop bits, and parity.
+- **Web Bluetooth Support**: Discover and connect to BLE devices. Built-in support for common UART services (e.g., FFE0, FFF0) and name prefix filtering.
+- **Professional TTY Terminal**: Powered by Xterm.js for a real Linux-like character interaction experience.
+- **ZMODEM Protocol (sz/rz)**: Bidirectional file transfers over Serial/Bluetooth, perfect for embedded development.
+- **HEX Mode**: Preview and send data in hexadecimal format.
+- **Cross-platform**: No drivers needed (subject to browser Web API support). Works in Chrome and Edge.
+- **Modern Tech Stack**: Built with React 19, TypeScript, and Vite with strict type safety.
+
+## 🛠️ Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite
 - **Terminal**: @xterm/xterm, @xterm/addon-fit
 - **Protocol**: zmodem.js
-- **UI Component**: Bootstrap 5 + Bootstrap Icons
-- **APIs**: Web Serial API, Web Bluetooth API
+- **UI Components**: Bootstrap 5 + Bootstrap Icons
+- **Web APIs**: Web Serial API, Web Bluetooth API
 
-## 📦 快速开始
+## 📦 Quick Start
 
-### 本地开发
+### Local Development
 
-1. **安装依赖**
+1. **Install Dependencies**
    ```bash
    pnpm install
    ```
 
-2. **启动开发服务器**
+2. **Start Dev Server**
    ```bash
    pnpm run dev
    ```
 
-3. **构建发布**
+3. **Build for Production**
    ```bash
    pnpm run build
    ```
 
-## 📖 使用指南
+## 📖 Usage Guide
 
-### 蓝牙连接
-- 程序支持 16-bit UUID（如 `ffe0`）和标准 128-bit UUID。
-- 使用“名称前缀”过滤时，建议同时正确填写设备的服务 UUID，以确保连接成功后能正常发现通信特征。
-- 蓝牙发送已内置队列管理和分片逻辑（127 字节/包），有效防止 `GATT operation already in progress` 冲突。
+### Bluetooth Connection
+- Supports both 16-bit UUIDs (e.g., `0xffe0`) and standard 128-bit UUIDs.
+- When using "Name Prefix" filtering, ensure the correct Service UUID is provided to successfully discover communication characteristics.
+- Includes a built-in write queue and data chunking (127 bytes/packet) to prevent `GATT operation already in progress` errors.
 
-### 文件传输 (sz/rz)
-- **sz (设备 -> 浏览器)**：在设备端执行 `sz filename`，浏览器将自动弹出下载提示。
-- **rz (浏览器 -> 设备)**：在设备端执行 `rz`，浏览器将自动弹出文件选择框，选择文件后即开始发送。
+### File Transfer (sz/rz)
+- **sz (Device -> Browser)**: Run `sz filename` on your device; the browser will automatically prompt a download.
+- **rz (Browser -> Device)**: Run `rz` on your device; the browser will open a file picker and begin uploading upon selection.
 
-## 📄 开源协议
+## 📄 License
 
-本项目采用 [MIT](LICENSE) 协议。
+This project is licensed under the [MIT](LICENSE) License.

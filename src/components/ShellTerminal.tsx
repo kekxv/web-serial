@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import * as ZModem from 'zmodem.js'
+import { translations, type Language } from '../locales/translations'
 import '@xterm/xterm/css/xterm.css'
 import './ShellTerminal.css'
 
@@ -9,18 +10,21 @@ interface ShellTerminalProps {
   connected: boolean
   onData: (data: Uint8Array) => void
   onClear?: () => void
+  lang: Language
 }
 
 const ShellTerminal: React.FC<ShellTerminalProps> = ({
   connected,
   onData,
   onClear,
+  lang,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const sentryRef = useRef<ZModem.Sentry | null>(null)
   const sessionRef = useRef<ZModem.ZModemSession | null>(null)
   const onDataRef = useRef(onData)
+  const t = translations[lang]
 
   // 更新 ref 确保总是使用最新的回调
   useEffect(() => {
@@ -179,13 +183,13 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
       <div className="shell-terminal-header">
         <h6 className="mb-0">
           <i className="bi bi-terminal-fill me-2"></i>
-          Xterm.js Console (Supports sz/rz)
+          {t.ttyTitle}
         </h6>
         <div className="shell-terminal-actions">
           <button 
             className="btn btn-sm btn-outline-danger" 
             onClick={() => { xtermRef.current?.clear(); onClear?.(); }} 
-            title="清空"
+            title={t.clear}
           >
             <i className="bi bi-trash"></i>
           </button>
