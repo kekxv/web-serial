@@ -37,7 +37,8 @@ function App() {
   const [hexMode, setHexMode] = useState(false)
   const [shellMode, setShellMode] = useState(false)
   const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>('utf-8')
-  const [frameTimeout, setFrameTimeout] = useState(5) // 默认 5ms 分帧超时
+  const [frameTimeout, setFrameTimeout] = useState(5)
+  const [maxHistory, setMaxHistory] = useState(1000) // 默认保留 1000 行
   const [darkMode, setDarkMode] = useState(() => 
     window.matchMedia('(prefers-color-scheme: dark)').matches
   )
@@ -91,8 +92,15 @@ function App() {
       data,
       direction,
     }
-    setMessages((prev) => [...prev, newMessage])
-  }, [])
+    setMessages((prev) => {
+      const newMessages = [...prev, newMessage]
+      // 自动截断超出长度的消息
+      if (newMessages.length > maxHistory) {
+        return newMessages.slice(newMessages.length - maxHistory)
+      }
+      return newMessages
+    })
+  }, [maxHistory])
 
   const flushRxFrame = useCallback(() => {
     if (rxFrameBuffer.current.length === 0) return
@@ -116,7 +124,6 @@ function App() {
 
   useEffect(() => {
     const onDataHandler = (data: Uint8Array, direction: 'rx' | 'tx') => {
-      // 统计和 Shell 模式始终立即更新
       if (direction === 'rx') {
         setRxCount(prev => prev + data.length)
         if (window.shellTerminal) window.shellTerminal.write(data)
@@ -124,12 +131,10 @@ function App() {
         setTxCount(prev => prev + data.length)
       }
 
-      // 如果在 Shell 模式，终端列表不显示数据，由 Shell 自身渲染
       if (shellMode) return
 
       if (direction === 'rx') {
         if (frameTimeout > 0) {
-          // 分帧逻辑：重置定时器，累加缓冲区
           if (rxFrameTimer.current) window.clearTimeout(rxFrameTimer.current)
           rxFrameBuffer.current.push(...Array.from(data))
           rxFrameTimer.current = window.setTimeout(() => {
@@ -137,12 +142,10 @@ function App() {
             rxFrameTimer.current = null
           }, frameTimeout)
         } else {
-          // 实时模式
           const decoder = new TextDecoder(encoding)
           addMessage(decoder.decode(data), 'rx')
         }
       } else {
-        // 发送数据直接显示
         const decoder = new TextDecoder(encoding)
         addMessage(decoder.decode(data), 'tx')
       }
@@ -206,9 +209,7 @@ function App() {
   const handleSend = async (customData?: string, customType?: 'text' | 'hex') => {
     const rawData = customData !== undefined ? customData : sendData
     if (!rawData.trim()) return
-    
     const isHex = customType ? (customType === 'hex') : hexMode
-
     let dataToSend: string | Uint8Array = rawData
     if (isHex) {
       const cleanHex = rawData.replace(/\s+/g, '').replace(/0x/gi, '')
@@ -218,21 +219,12 @@ function App() {
       }
       const length = (cleanHex.length / 2) | 0
       const result = new Uint8Array(length)
-      for (let i = 0; i < length; i++) {
-        result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
-      }
+      for (let i = 0; i < length; i++) result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
       dataToSend = result
     }
-
-    const success = connectionType === 'serial' 
-      ? await SerialPortManager.send(dataToSend) 
-      : await BluetoothManager.send(dataToSend)
-
-    if (!success) {
-      alert(t.sendFail)
-    } else if (customData === undefined) {
-      setSendData('')
-    }
+    const success = connectionType === 'serial' ? await SerialPortManager.send(dataToSend) : await BluetoothManager.send(dataToSend)
+    if (!success) alert(t.sendFail)
+    else if (customData === undefined) setSendData('')
   }
 
   const handleShellData = async (data: Uint8Array) => {
@@ -272,7 +264,7 @@ function App() {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-gear"></i> {t.serialConfig}</div>
               <div className="form-group mb-3"><label>{t.baudRate}</label>
-                <select className="form-select" value={serialConfig.baudRate} onChange={(e) => setSerialConfig({ ...serialConfig, baudRate: Number(e.target.value) }) }>
+                <select className="form-select" value={serialConfig.baudRate} onChange={(e) => setSerialConfig({ ...serialConfig, baudRate: Number(e.target.value) })}> 
                   {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
@@ -281,7 +273,7 @@ function App() {
                 <div className="col-6"><label>{t.stopBits}</label><select className="form-select" value={serialConfig.stopBits} onChange={(e) => setSerialConfig({ ...serialConfig, stopBits: Number(e.target.value) })}>{[1, 2].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
               </div>
               <div className="form-group mb-3"><label>{t.parity}</label>
-                <select className="form-select" value={serialConfig.parity} onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as 'none' | 'even' | 'odd' }) }>
+                <select className="form-select" value={serialConfig.parity} onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as 'none' | 'even' | 'odd' })}>
                   <option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option>
                 </select>
               </div>
@@ -293,7 +285,7 @@ function App() {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-bluetooth"></i> {t.bleConfig}</div>
               <div className="form-group mb-3"><label>{t.filterType}</label>
-                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' })}> 
+                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' })}>
                   <option value="name">{t.byName}</option><option value="service">{t.byService}</option><option value="all">{t.showAll}</option>
                 </select>
               </div>
@@ -311,8 +303,9 @@ function App() {
             <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="hexMode" checked={hexMode} onChange={(e) => setHexMode(e.target.checked)} /><label className="form-check-label" htmlFor="hexMode">{t.hexMode}</label></div>
             <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="shellMode" checked={shellMode} onChange={(e) => setShellMode(e.target.checked)} /><label className="form-check-label" htmlFor="shellMode">{t.shellMode}</label></div>
             <div className="form-group mb-2"><label>{t.encoding}</label><select className="form-select" value={encoding} onChange={(e) => setEncoding(e.target.value as 'utf-8' | 'gbk')}><option value="utf-8">UTF-8</option><option value="gbk">GBK</option></select></div>
-            <div className="form-group mb-2"><label>{t.frameTimeout}</label>
-              <input type="number" className="form-control form-control-sm" value={frameTimeout} onChange={e => setFrameTimeout(Math.max(0, Number(e.target.value)))} />
+            <div className="row g-2 mb-2">
+              <div className="col-6"><label className="small">{t.frameTimeout}</label><input type="number" className="form-control form-control-sm" value={frameTimeout} onChange={e => setFrameTimeout(Math.max(0, Number(e.target.value)))} /></div>
+              <div className="col-6"><label className="small">{t.maxHistory}</label><input type="number" className="form-control form-control-sm" value={maxHistory} onChange={e => setMaxHistory(Math.max(10, Number(e.target.value)))} /></div>
             </div>
             <div className="form-check"><input type="checkbox" className="form-check-input" id="darkMode" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} /><label className="form-check-label" htmlFor="darkMode">{t.darkMode} ({darkMode ? t.auto : t.light})</label></div>
           </div>

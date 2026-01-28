@@ -61,6 +61,7 @@ export const translations = {
     reset: '重置',
     bytes: '字节',
     frameTimeout: '分帧超时 (ms)',
+    maxHistory: '历史保留行数',
   },
   en: {
     title: 'Web Serial Assistant',
@@ -124,6 +125,7 @@ export const translations = {
     reset: 'Reset',
     bytes: 'Bytes',
     frameTimeout: 'Frame Timeout (ms)',
+    maxHistory: 'Max History Lines',
   }
 }
 
