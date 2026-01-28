@@ -18,22 +18,21 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
-  const sentryRef = useRef<any>(null)
-  const sessionRef = useRef<any>(null)
+  const sentryRef = useRef<ZModem.Sentry | null>(null)
+  const sessionRef = useRef<ZModem.ZModemSession | null>(null)
   const onDataRef = useRef(onData)
 
-  // 更新 ref
+  // 更新 ref 确保总是使用最新的回调
   useEffect(() => {
     onDataRef.current = onData
   }, [onData])
 
   // 对应 sz：远程发送，本地接收
-  const handleZmodemSend = async (session: any) => {
+  const handleZmodemSend = async (session: ZModem.ZModemSession) => {
     console.log('ZMODEM Send Session started (receiving file from device)')
     
-    session.on('offer', (offer: any) => {
-      offer.accept().then((contents: any) => {
+    session.on('offer', (offer: ZModem.ZModemOffer) => {
+      offer.accept().then((contents: Uint8Array[]) => {
         const blob = new Blob(contents, { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -53,13 +52,14 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
   }
 
   // 对应 rz：远程接收，本地发送
-  const handleZmodemReceive = async (session: any) => {
+  const handleZmodemReceive = async (session: ZModem.ZModemSession) => {
     console.log('ZMODEM Receive Session started (sending file to device)')
 
     const input = document.createElement('input')
     input.type = 'file'
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0]
+    input.onchange = async (e: Event) => {
+      const target = e.target as HTMLInputElement
+      const file = target.files?.[0]
       if (!file) {
         session.skip()
         return
@@ -113,7 +113,6 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
     fitAddon.fit()
 
     xtermRef.current = term
-    fitAddonRef.current = fitAddon
 
     // 初始化 ZMODEM Sentry
     const sentry = new ZModem.Sentry({
@@ -123,7 +122,7 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
       sender: (data: number[]) => {
         onDataRef.current(new Uint8Array(data))
       },
-      on_detect: (detection: any) => {
+      on_detect: (detection: ZModem.ZModemDetection) => {
         const zsession = detection.confirm()
         sessionRef.current = zsession
 
@@ -150,13 +149,13 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
     const handleResize = () => fitAddon.fit()
     window.addEventListener('resize', handleResize)
 
-    // 暴露方法给父组件
-    ;(window as any).shellTerminal = {
+    // 暴露方法给全局窗口对象
+    window.shellTerminal = {
       write: (data: Uint8Array) => {
         if (sessionRef.current) {
           sessionRef.current.consume(data)
-        } else {
-          sentry.consume(data)
+        } else if (sentryRef.current) {
+          sentryRef.current.consume(data)
         }
       },
       clear: () => term.clear()
@@ -164,6 +163,7 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
 
     return () => {
       window.removeEventListener('resize', handleResize)
+      window.shellTerminal = undefined
       term.dispose()
     }
   }, [])
@@ -182,7 +182,11 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
           Xterm.js Console (Supports sz/rz)
         </h6>
         <div className="shell-terminal-actions">
-          <button className="btn btn-sm btn-outline-danger" onClick={() => { xtermRef.current?.clear(); onClear?.(); }} title="清空">
+          <button 
+            className="btn btn-sm btn-outline-danger" 
+            onClick={() => { xtermRef.current?.clear(); onClear?.(); }} 
+            title="清空"
+          >
             <i className="bi bi-trash"></i>
           </button>
         </div>

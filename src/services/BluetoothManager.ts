@@ -16,102 +16,111 @@ class BluetoothManager {
   private statusCallback: BluetoothStatusCallback | null = null
   private writeQueue: Promise<void> = Promise.resolve()
 
-  // 检查浏览器支持
+  /**
+   * 检查浏览器是否支持 Web Bluetooth API
+   */
   isSupported(): boolean {
     return 'bluetooth' in navigator
   }
 
-  // 设置数据回调
+  /**
+   * 设置数据接收回调
+   */
   onData(callback: BluetoothDataCallback): void {
     this.dataCallback = callback
   }
 
-  // 设置状态回调
+  /**
+   * 设置连接状态变更回调
+   */
   onStatusChange(callback: BluetoothStatusCallback): void {
     this.statusCallback = callback
     callback(this.isConnected())
   }
 
-  // 解析 UUID (支持数字或字符串)
+  /**
+   * 解析 UUID 为 Web Bluetooth 接受的格式
+   */
   private parseUUID(uuid: string | number): string | number {
     if (typeof uuid === 'number') return uuid
     if (!uuid) return ''
     const clean = uuid.toString().toLowerCase().trim()
     if (clean.startsWith('0x')) return parseInt(clean, 16)
-    // 如果是 4位以内的 16 进制字符串，视为 16位 UUID 数字
     if (/^[0-9a-f]{1,4}$/.test(clean)) return parseInt(clean, 16)
     return clean
   }
 
-  // 连接 BLE 设备
+  /**
+   * 连接蓝牙设备
+   */
   async connect(config: BluetoothDeviceConfig): Promise<boolean> {
     try {
-      if (!this.isSupported()) {
-        throw new Error('Web Bluetooth API is not supported')
-      }
+      if (!this.isSupported()) throw new Error('Web Bluetooth API is not supported')
 
       const sUUID = this.parseUUID(config.serviceUUID || '')
       const cUUID = this.parseUUID(config.characteristicUUID || '')
 
-      // 1. 扫描/请求设备 (参考 search 代码)
-      let options: any = {
+      const options: RequestDeviceOptions = {
         optionalServices: []
       }
 
+      // 配置扫描过滤选项
       if (config.namePrefix) {
         options.filters = [{ namePrefix: config.namePrefix }]
-        if (sUUID) options.optionalServices.push(sUUID)
+        if (sUUID) options.optionalServices?.push(sUUID as BluetoothServiceUUID)
       } else if (config.acceptAllDevices) {
         options.acceptAllDevices = true
-        if (sUUID) options.optionalServices.push(sUUID)
+        if (sUUID) options.optionalServices?.push(sUUID as BluetoothServiceUUID)
       } else if (sUUID) {
-        options.filters = [{ services: [sUUID] }]
+        options.filters = [{ services: [sUUID as BluetoothServiceUUID] }]
       }
 
+      // 合并额外的可选服务
       if (config.optionalServices) {
         config.optionalServices.forEach(s => {
           const p = this.parseUUID(s)
-          if (!options.optionalServices.includes(p)) options.optionalServices.push(p)
+          if (!options.optionalServices?.includes(p as BluetoothServiceUUID)) {
+            options.optionalServices?.push(p as BluetoothServiceUUID)
+          }
         })
       }
 
-      console.log('Requesting Bluetooth device with options:', options)
+      console.log('Requesting Bluetooth device...', options)
       this.device = await navigator.bluetooth.requestDevice(options)
       
-      // 2. 连接设备 (参考 connect 代码)
+      this.device.addEventListener('gattserverdisconnected', this.handleDisconnect.bind(this))
+
       console.log('Connecting to GATT server...')
       const server = await this.device.gatt?.connect()
       if (!server) throw new Error('Failed to connect to GATT server')
 
-      this.device.addEventListener('gattserverdisconnected', () => {
-        this.handleDisconnect()
-      })
+      console.log('Accessing service:', sUUID)
+      const service = await server.getPrimaryService(sUUID as BluetoothServiceUUID)
 
-      console.log('Getting primary service:', sUUID)
-      const service = await server.getPrimaryService(sUUID)
+      console.log('Accessing characteristic:', cUUID)
+      this.characteristic = await service.getCharacteristic(cUUID as BluetoothCharacteristicUUID)
 
-      console.log('Getting characteristic:', cUUID)
-      this.characteristic = await service.getCharacteristic(cUUID)
-
-      // 3. 订阅通知
+      // 开启通知订阅
       await this.characteristic.startNotifications()
-      this.characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-        const value = event.target.value
-        if (value) {
-          this.dataCallback?.(new Uint8Array(value.buffer), 'rx')
+      this.characteristic.addEventListener('characteristicvaluechanged', (event: Event) => {
+        const char = event.target as BluetoothRemoteGATTCharacteristic
+        if (char.value) {
+          this.dataCallback?.(new Uint8Array(char.value.buffer), 'rx')
         }
       })
 
       this.statusCallback?.(true)
       return true
     } catch (error) {
-      console.error('Bluetooth connect error:', error)
+      console.error('Bluetooth connection failed:', error)
       this.statusCallback?.(false)
       return false
     }
   }
 
-  // 处理断开连接
+  /**
+   * 处理意外断开连接
+   */
   private handleDisconnect(): void {
     console.log('Bluetooth device disconnected')
     this.statusCallback?.(false)
@@ -120,29 +129,25 @@ class BluetoothManager {
     this.writeQueue = Promise.resolve()
   }
 
-  // 发送数据 (带队列管理和分片)
+  /**
+   * 发送数据 (带分片和队列管理)
+   */
   async send(data: string | Uint8Array): Promise<boolean> {
     if (!this.characteristic) return false
 
     const value = typeof data === 'string' ? new TextEncoder().encode(data) : data
 
-    // 将新的写入请求排入队列
     this.writeQueue = this.writeQueue.then(async () => {
       try {
         if (!this.characteristic) return
-
-        // 按照参考代码逻辑进行分片发送 (每片 127 字节)
+        // BLE MTU 限制分片发送 (127 字节每包)
         for (let i = 0; i < value.length; i += 127) {
-          let end = Math.min(value.length, i + 127)
-          if (end === i) break
-
-          const chunk = value.subarray(i, end)
-          await this.characteristic.writeValue(chunk)
+          const end = Math.min(value.length, i + 127)
+          await this.characteristic.writeValue(value.subarray(i, end))
         }
-        
         this.dataCallback?.(value, 'tx')
       } catch (error) {
-        console.error('Bluetooth send error:', error)
+        console.error('Bluetooth send failed:', error)
       }
     })
 
@@ -150,32 +155,36 @@ class BluetoothManager {
     return true
   }
 
-  // 断开连接
+  /**
+   * 主动断开连接
+   */
   async disconnect(): Promise<void> {
     if (this.characteristic) {
       try {
         await this.characteristic.stopNotifications()
-      } catch (error) {
-        console.error('Error stopping notifications:', error)
-      }
+      } catch { /* ignore */ }
       this.characteristic = null
     }
 
-    if (this.device) {
-      this.device.gatt?.disconnect()
-      this.device = null
+    if (this.device?.gatt?.connected) {
+      this.device.gatt.disconnect()
     }
 
+    this.device = null
     this.writeQueue = Promise.resolve()
     this.statusCallback?.(false)
   }
 
-  // 获取连接状态
+  /**
+   * 获取当前连接状态
+   */
   isConnected(): boolean {
-    return this.device !== null && this.device.gatt?.connected
+    return this.device?.gatt?.connected || false
   }
 
-  // 清理
+  /**
+   * 组件卸载时的清理
+   */
   async cleanup(): Promise<void> {
     await this.disconnect()
   }

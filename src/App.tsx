@@ -27,7 +27,10 @@ function App() {
   const [hexMode, setHexMode] = useState(false)
   const [shellMode, setShellMode] = useState(false)
   const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>('utf-8')
-  const [darkMode, setDarkMode] = useState(true)
+  // 初始化时直接检测系统主题
+  const [darkMode, setDarkMode] = useState(() => 
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
   const [messages, setMessages] = useState<TerminalMessage[]>([])
   const [sendData, setSendData] = useState('')
 
@@ -47,14 +50,11 @@ function App() {
     filterType: 'name'
   })
 
-  // 监听系统主题变化
+  // 仅监听系统主题变化
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    setDarkMode(mediaQuery.matches)
-
     const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches)
     mediaQuery.addEventListener('change', handler)
-
     return () => mediaQuery.removeEventListener('change', handler)
   }, [])
 
@@ -73,56 +73,41 @@ function App() {
     SerialPortManager.onData((data, direction) => {
       if (connectionType !== 'serial') return
       
-      // 不管什么模式都记录到 messages (Terminal 组件)
       const decoder = new TextDecoder(encoding)
       const text = decoder.decode(data)
       addMessage(text, direction)
 
-      // Shell 模式下通过 window.shellTerminal.write 写入
-      if ((window as any).shellTerminal) {
-        if (direction === 'rx') {
-          (window as any).shellTerminal.write(data)
-        }
+      if (window.shellTerminal && direction === 'rx') {
+        window.shellTerminal.write(data)
       }
     })
 
     SerialPortManager.onStatusChange((status) => {
-      if (connectionType === 'serial') {
-        setConnected(status)
-      }
+      if (connectionType === 'serial') setConnected(status)
     })
 
     // 设置蓝牙数据回调
     BluetoothManager.onData((data, direction) => {
       if (connectionType !== 'bluetooth') return
+      
       const decoder = new TextDecoder(encoding)
       const text = decoder.decode(data)
       addMessage(text, direction)
 
-      // Shell 模式
-      if ((window as any).shellTerminal) {
-        if (direction === 'rx') {
-          (window as any).shellTerminal.write(data)
-        }
+      if (window.shellTerminal && direction === 'rx') {
+        window.shellTerminal.write(data)
       }
     })
 
     BluetoothManager.onStatusChange((status) => {
-      if (connectionType === 'bluetooth') {
-        setConnected(status)
-      }
+      if (connectionType === 'bluetooth') setConnected(status)
     })
-  }, [hexMode, encoding, connectionType])
+  }, [encoding, connectionType])
 
   // 应用主题变化
   useEffect(() => {
-    if (darkMode) {
-      document.body.classList.remove('light-theme')
-      document.body.classList.add('dark-theme')
-    } else {
-      document.body.classList.remove('dark-theme')
-      document.body.classList.add('light-theme')
-    }
+    document.body.classList.toggle('dark-theme', darkMode)
+    document.body.classList.toggle('light-theme', !darkMode)
   }, [darkMode])
 
   const connectSerial = async () => {
@@ -144,22 +129,18 @@ function App() {
       return
     }
     
-    const config: any = {
+    const config = {
       serviceUUID: bluetoothConfig.serviceUUID,
       characteristicUUID: bluetoothConfig.characteristicUUID,
-    }
-
-    if (bluetoothConfig.filterType === 'all') {
-      config.acceptAllDevices = true
-    } else if (bluetoothConfig.filterType === 'name') {
-      config.namePrefix = bluetoothConfig.namePrefix
+      namePrefix: bluetoothConfig.filterType === 'name' ? bluetoothConfig.namePrefix : undefined,
+      acceptAllDevices: bluetoothConfig.filterType === 'all'
     }
 
     const success = await BluetoothManager.connect(config)
     if (success) {
       setConnectionType('bluetooth')
     } else {
-      alert('连接蓝牙设备失败')
+      alert('连接蓝牙设备失败，请检查服务 UUID 是否正确')
     }
   }
 
@@ -179,7 +160,6 @@ function App() {
     let dataToSend: string | Uint8Array = sendData.trim()
 
     if (hexMode) {
-      // HEX 模式：转换 hex 字符串为 Uint8Array
       const cleanHex = sendData.trim().replace(/\s+/g, '')
       const hexRegex = /^[0-9A-Fa-f]{2,}$/
       if (!hexRegex.test(cleanHex)) {
@@ -189,7 +169,7 @@ function App() {
       const length = (cleanHex.length / 2) | 0
       const result = new Uint8Array(length)
       for (let i = 0; i < length; i++) {
-        result[i] = parseInt(cleanHex.substr(i * 2, 2), 16)
+        result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
       }
       dataToSend = result
     }
@@ -223,8 +203,8 @@ function App() {
 
   const handleClear = () => {
     setMessages([])
-    if ((window as any).shellTerminal) {
-      (window as any).shellTerminal.clear()
+    if (window.shellTerminal) {
+      window.shellTerminal.clear()
     }
   }
 
@@ -278,7 +258,6 @@ function App() {
               <div className="section-title">
                 <i className="bi bi-gear"></i> 串口配置
               </div>
-              {/* ... (串口配置表单保持不变) ... */}
               <div className="form-group mb-3">
                 <label>波特率</label>
                 <select
@@ -286,7 +265,7 @@ function App() {
                   value={serialConfig.baudRate}
                   onChange={(e) => setSerialConfig({ ...serialConfig, baudRate: Number(e.target.value) })}
                 >
-                  {[
+                  {[ 
                     1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600,
                     115200, 230400, 460800, 921600
                   ].map(rate => (
@@ -325,7 +304,7 @@ function App() {
                 <select
                   className="form-select"
                   value={serialConfig.parity}
-                  onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as any })}
+                  onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as 'none' | 'even' | 'odd' })}
                 >
                   <option value="none">None</option>
                   <option value="even">Even</option>
@@ -351,7 +330,7 @@ function App() {
                 <select
                   className="form-select"
                   value={bluetoothConfig.filterType}
-                  onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as any })}
+                  onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' })}
                 >
                   <option value="name">按名称前缀</option>
                   <option value="service">按服务 UUID</option>
