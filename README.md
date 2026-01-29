@@ -69,6 +69,85 @@ A browser-based debugger for Serial and Bluetooth communication, featuring TTY t
 - **sz (Device -> Browser)**: Run `sz filename` on your device; the browser will automatically prompt a download.
 - **rz (Browser -> Device)**: Run `rz` on your device; the browser will open a file picker and begin uploading upon selection.
 
+## 🔌 协议预设 (Protocol Presets)
+
+你可以通过向 `src/presets/` 目录添加新的 `.ts` 文件来贡献自定义协议模版。
+
+### 如何添加新协议
+
+1. 在 `src/presets/` 目录下创建一个新的 TypeScript 文件 (例如 `my_protocol.ts`)。
+2. 按照以下结构导出协议定义：
+
+```typescript
+const pack = `
+function(option) {
+  const { data, utils } = option;
+  // 将输入数据转换为原始字节
+  return data;
+}`;
+
+const unpack = `
+function(option) {
+  const { data, utils } = option;
+  // 将原始字节转换为逻辑对象
+  return data;
+}`;
+
+const toString = `
+function(option) {
+  const { data, utils } = option;
+  // 将逻辑对象转换为终端显示的文本
+  return String(data);
+}`;
+
+export default {
+  name: '我的协议名称',
+  pack,
+  unpack,
+  toString
+};
+```
+
+3. 重新打包或运行开发服务器，新协议将自动出现在“协议预设”下拉菜单中。
+
+---
+
+### Adding New Protocols (English)
+
+You can contribute custom protocol templates by adding new `.ts` files to the `src/presets/` directory.
+
+1. Create a new TypeScript file in `src/presets/` (e.g., `my_protocol.ts`).
+2. Export your protocol definition using the following structure:
+
+```typescript
+const pack = `
+function(option) {
+  const { data, utils } = option;
+  return data;
+}`;
+
+const unpack = `
+function(option) {
+  const { data, utils } = option;
+  return data;
+}`;
+
+const toString = `
+function(option) {
+  const { data, utils } = option;
+  return String(data);
+}`;
+
+export default {
+  name: 'My Protocol Name',
+  pack,
+  unpack,
+  toString
+};
+```
+
+3. The application will automatically scan and include your new preset in the dropdown menu.
+
 ## 📄 License
 
 This project is licensed under the [MIT](LICENSE) License.
