@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import {useState, useEffect, useRef, useCallback} from 'react'
 import SerialPortManager from './services/SerialPortManager'
 import BluetoothManager from './services/BluetoothManager'
-import Terminal, { type TerminalMessage } from './components/Terminal'
+import Terminal, {type TerminalMessage} from './components/Terminal'
 import ShellTerminal from './components/ShellTerminal'
 import CommandPanel from './components/CommandPanel'
 import * as FormatUtils from './utils/FormatUtils'
@@ -9,8 +9,8 @@ import Editor from 'react-simple-code-editor'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/themes/prism-tomorrow.css'
-import { translations, type Language } from './locales/translations'
-import { PROTOCOL_PRESETS } from './presets'
+import {translations, type Language} from './locales/translations'
+import {PROTOCOL_PRESETS} from './presets'
 import './App.css'
 
 type ConnectionType = 'serial' | 'bluetooth' | 'none'
@@ -35,22 +35,22 @@ function App() {
     const saved = localStorage.getItem('app_lang')
     return (saved as Language) || (navigator.language.startsWith('zh') ? 'zh' : 'en')
   })
-  
+
   const t = translations[lang]
 
-  const [connectionType, setConnectionType] = useState<ConnectionType>(() => 
+  const [connectionType, setConnectionType] = useState<ConnectionType>(() =>
     (localStorage.getItem('app_connection_type') as ConnectionType) || 'none'
   )
   const [connected, setConnected] = useState(false)
   const [hexMode, setHexMode] = useState(() => localStorage.getItem('app_hex_mode') === 'true')
   const [shellMode, setShellMode] = useState(() => localStorage.getItem('app_shell_mode') === 'true')
-  const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>(() => 
+  const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>(() =>
     (localStorage.getItem('app_encoding') as 'utf-8' | 'gbk') || 'utf-8'
   )
-  const [frameTimeout, setFrameTimeout] = useState(() => 
+  const [frameTimeout, setFrameTimeout] = useState(() =>
     Number(localStorage.getItem('app_frame_timeout')) || 5
   )
-  const [maxHistory, setMaxHistory] = useState(() => 
+  const [maxHistory, setMaxHistory] = useState(() =>
     Number(localStorage.getItem('app_max_history')) || 1000
   )
   const [darkMode, setDarkMode] = useState(() => {
@@ -60,7 +60,7 @@ function App() {
   })
   const [messages, setMessages] = useState<TerminalMessage[]>([])
   const [sendData, setSendData] = useState('')
-  
+
   // 统计数据
   const [rxCount, setRxCount] = useState(0)
   const [txCount, setTxCount] = useState(0)
@@ -105,10 +105,10 @@ function(option) {
       const now = Date.now()
       if (prev.length > 0) {
         const lastMessage = prev[prev.length - 1]
-        
+
         // 只要内容完全一致、方向一致就合并计数
         if (
-          lastMessage.data === data && 
+          lastMessage.data === data &&
           lastMessage.direction === direction
         ) {
           const newMessages = [...prev]
@@ -128,7 +128,7 @@ function(option) {
         direction,
         count: 1
       }
-      
+
       const newMessages = [...prev, newMessage]
       if (newMessages.length > maxHistory) {
         return newMessages.slice(newMessages.length - maxHistory)
@@ -141,17 +141,28 @@ function(option) {
   const rxFrameBuffer = useRef<number[]>([])
   const rxFrameTimer = useRef<number | null>(null)
 
-  const runProtocolFunc = useCallback((code: string, data: unknown) => {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  const runProtocolFunc = useCallback((handler: string | Function, data: unknown) => {
     try {
-      // 提取函数体，支持 function(option) { ... } 或直接的代码
-      let body = code
-      const match = code.match(/function\s*\(.*?\)\s*\{([\s\S]*)\}/)
+      if (typeof handler === 'function') {
+        return handler({data, utils: FormatUtils})
+      }
+
+      const trimmed = handler.trim()
+      // 支持箭头函数和完整函数定义的字符串执行
+      if (trimmed.includes('=>') || (trimmed.startsWith('function') && !trimmed.match(/^function\s*\(.*?\)\s*\{/))) {
+        const fn = new Function('option', `return (${trimmed})(option)`)
+        return fn({data, utils: FormatUtils})
+      }
+
+      let body = handler
+      const match = handler.match(/function\s*\(.*?\)\s*\{([\s\S]*)\}/)
       if (match) {
         body = match[1]
       }
-      
+
       const fn = new Function('option', body)
-      return fn({ data, utils: FormatUtils })
+      return fn({data, utils: FormatUtils})
     } catch (e) {
       console.error('Protocol function error:', e)
       return data
@@ -182,7 +193,7 @@ function(option) {
   const [bluetoothConfig, setBluetoothConfig] = useState<BluetoothConfig>(() => {
     const saved = localStorage.getItem('app_bluetooth_config')
     return saved ? JSON.parse(saved) : {
-      serviceUUID: '0xfff0', 
+      serviceUUID: '0xfff0',
       characteristicUUID: '0xfff1',
       namePrefix: 'KT',
       filterType: 'name'
@@ -213,7 +224,7 @@ function(option) {
     localStorage.setItem('app_serial_config', JSON.stringify(serialConfig))
     localStorage.setItem('app_bluetooth_config', JSON.stringify(bluetoothConfig))
   }, [
-    connectionType, hexMode, shellMode, encoding, frameTimeout, 
+    connectionType, hexMode, shellMode, encoding, frameTimeout,
     maxHistory, darkMode, protocolEnabled, protocolPanelCollapsed, serialConfig, bluetoothConfig
   ])
 
@@ -349,7 +360,7 @@ function(option) {
     const rawData = customData !== undefined ? customData : sendData
     if (!rawData.trim()) return
     const isHex = customType ? (customType === 'hex') : hexMode
-    
+
     let dataToPack: string | Uint8Array = rawData
     if (isHex) {
       const cleanHex = rawData.replace(/\s+/g, '').replace(/0x/gi, '')
@@ -384,8 +395,12 @@ function(option) {
         </div>
         <div className="header-info">
           <div className="btn-group btn-group-sm me-3">
-            <button className={`btn btn-outline-secondary ${lang === 'zh' ? 'active' : ''}`} onClick={() => setLang('zh')}>中</button>
-            <button className={`btn btn-outline-secondary ${lang === 'en' ? 'active' : ''}`} onClick={() => setLang('en')}>EN</button>
+            <button className={`btn btn-outline-secondary ${lang === 'zh' ? 'active' : ''}`}
+                    onClick={() => setLang('zh')}>中
+            </button>
+            <button className={`btn btn-outline-secondary ${lang === 'en' ? 'active' : ''}`}
+                    onClick={() => setLang('en')}>EN
+            </button>
           </div>
           <span className={`status-badge ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? t.connected : t.disconnected}
@@ -398,8 +413,10 @@ function(option) {
           <div className="panel-section">
             <div className="section-title"><i className="bi bi-link-45deg"></i> {t.connectionType}</div>
             <div className="btn-group w-100">
-              <button className={`btn ${connectionType === 'serial' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => !connected && setConnectionType('serial')} disabled={connected}>{t.serial}</button>
-              <button className={`btn ${connectionType === 'bluetooth' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => !connected && setConnectionType('bluetooth')} disabled={connected}>{t.ble}</button>
+              <button className={`btn ${connectionType === 'serial' ? 'btn-primary' : 'btn-outline-primary'}`}
+                      onClick={() => !connected && setConnectionType('serial')} disabled={connected}>{t.serial}</button>
+              <button className={`btn ${connectionType === 'bluetooth' ? 'btn-primary' : 'btn-outline-primary'}`}
+                      onClick={() => !connected && setConnectionType('bluetooth')} disabled={connected}>{t.ble}</button>
             </div>
           </div>
 
@@ -407,20 +424,42 @@ function(option) {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-gear"></i> {t.serialConfig}</div>
               <div className="form-group mb-3"><label>{t.baudRate}</label>
-                <select className="form-select" value={serialConfig.baudRate} onChange={(e) => setSerialConfig({ ...serialConfig, baudRate: Number(e.target.value) })}> 
-                  {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map(r => <option key={r} value={r}>{r}</option>)}
+                <select className="form-select" value={serialConfig.baudRate}
+                        onChange={(e) => setSerialConfig({...serialConfig, baudRate: Number(e.target.value)})}>
+                  {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map(r => <option
+                    key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div className="row g-2 mb-3">
-                <div className="col-6"><label>{t.dataBits}</label><select className="form-select" value={serialConfig.dataBits} onChange={(e) => setSerialConfig({ ...serialConfig, dataBits: Number(e.target.value) })}>{[7, 8].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
-                <div className="col-6"><label>{t.stopBits}</label><select className="form-select" value={serialConfig.stopBits} onChange={(e) => setSerialConfig({ ...serialConfig, stopBits: Number(e.target.value) })}>{[1, 2].map(b => <option key={b} value={b}>{b}</option>)}</select></div>
+                <div className="col-6"><label>{t.dataBits}</label><select className="form-select"
+                                                                          value={serialConfig.dataBits}
+                                                                          onChange={(e) => setSerialConfig({
+                                                                            ...serialConfig,
+                                                                            dataBits: Number(e.target.value)
+                                                                          })}>{[7, 8].map(b => <option key={b}
+                                                                                                       value={b}>{b}</option>)}</select>
+                </div>
+                <div className="col-6"><label>{t.stopBits}</label><select className="form-select"
+                                                                          value={serialConfig.stopBits}
+                                                                          onChange={(e) => setSerialConfig({
+                                                                            ...serialConfig,
+                                                                            stopBits: Number(e.target.value)
+                                                                          })}>{[1, 2].map(b => <option key={b}
+                                                                                                       value={b}>{b}</option>)}</select>
+                </div>
               </div>
               <div className="form-group mb-3"><label>{t.parity}</label>
-                <select className="form-select" value={serialConfig.parity} onChange={(e) => setSerialConfig({ ...serialConfig, parity: e.target.value as 'none' | 'even' | 'odd' })}>
-                  <option value="none">None</option><option value="even">Even</option><option value="odd">Odd</option>
+                <select className="form-select" value={serialConfig.parity} onChange={(e) => setSerialConfig({
+                  ...serialConfig,
+                  parity: e.target.value as 'none' | 'even' | 'odd'
+                })}>
+                  <option value="none">None</option>
+                  <option value="even">Even</option>
+                  <option value="odd">Odd</option>
                 </select>
               </div>
-              {!connected && <button className="btn btn-success w-100" onClick={connectSerial}><i className="bi bi-plug"></i> {t.openSerial}</button>}
+              {!connected && <button className="btn btn-success w-100" onClick={connectSerial}><i
+                className="bi bi-plug"></i> {t.openSerial}</button>}
             </div>
           )}
 
@@ -428,65 +467,117 @@ function(option) {
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-bluetooth"></i> {t.bleConfig}</div>
               <div className="form-group mb-3"><label>{t.filterType}</label>
-                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, filterType: e.target.value as 'service' | 'name' | 'all' })}>
-                  <option value="name">{t.byName}</option><option value="service">{t.byService}</option><option value="all">{t.showAll}</option>
+                <select className="form-select" value={bluetoothConfig.filterType} onChange={(e) => setBluetoothConfig({
+                  ...bluetoothConfig,
+                  filterType: e.target.value as 'service' | 'name' | 'all'
+                })}>
+                  <option value="name">{t.byName}</option>
+                  <option value="service">{t.byService}</option>
+                  <option value="all">{t.showAll}</option>
                 </select>
               </div>
               {bluetoothConfig.filterType === 'name' && (
-                <div className="form-group mb-3"><label>{t.namePrefix}</label><input type="text" className="form-control" value={bluetoothConfig.namePrefix} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, namePrefix: e.target.value })} /></div>
+                <div className="form-group mb-3"><label>{t.namePrefix}</label><input type="text"
+                                                                                     className="form-control"
+                                                                                     value={bluetoothConfig.namePrefix}
+                                                                                     onChange={(e) => setBluetoothConfig({
+                                                                                       ...bluetoothConfig,
+                                                                                       namePrefix: e.target.value
+                                                                                     })}/></div>
               )}
-              <div className="form-group mb-3"><label>{t.serviceUUID}</label><input type="text" className="form-control" value={bluetoothConfig.serviceUUID} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, serviceUUID: e.target.value })} /></div>
-              <div className="form-group mb-3"><label>{t.charUUID}</label><input type="text" className="form-control" value={bluetoothConfig.characteristicUUID} onChange={(e) => setBluetoothConfig({ ...bluetoothConfig, characteristicUUID: e.target.value })} /></div>
-              {!connected && <button className="btn btn-success w-100" onClick={connectBluetooth}><i className="bi bi-search"></i> {t.searchConnect}</button>}
+              <div className="form-group mb-3"><label>{t.serviceUUID}</label><input type="text" className="form-control"
+                                                                                    value={bluetoothConfig.serviceUUID}
+                                                                                    onChange={(e) => setBluetoothConfig({
+                                                                                      ...bluetoothConfig,
+                                                                                      serviceUUID: e.target.value
+                                                                                    })}/></div>
+              <div className="form-group mb-3"><label>{t.charUUID}</label><input type="text" className="form-control"
+                                                                                 value={bluetoothConfig.characteristicUUID}
+                                                                                 onChange={(e) => setBluetoothConfig({
+                                                                                   ...bluetoothConfig,
+                                                                                   characteristicUUID: e.target.value
+                                                                                 })}/></div>
+              {!connected && <button className="btn btn-success w-100" onClick={connectBluetooth}><i
+                className="bi bi-search"></i> {t.searchConnect}</button>}
             </div>
           )}
 
           <div className="panel-section">
             <div className="section-title"><i className="bi bi-sliders"></i> {t.displaySettings}</div>
-            <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="hexMode" checked={hexMode} onChange={(e) => setHexMode(e.target.checked)} /><label className="form-check-label" htmlFor="hexMode">{t.hexMode}</label></div>
-            <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="shellMode" checked={shellMode} onChange={(e) => setShellMode(e.target.checked)} /><label className="form-check-label" htmlFor="shellMode">{t.shellMode}</label></div>
-            <div className="form-group mb-2"><label>{t.encoding}</label><select className="form-select" value={encoding} onChange={(e) => setEncoding(e.target.value as 'utf-8' | 'gbk')}><option value="utf-8">UTF-8</option><option value="gbk">GBK</option></select></div>
+            <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="hexMode"
+                                                    checked={hexMode}
+                                                    onChange={(e) => setHexMode(e.target.checked)}/><label
+              className="form-check-label" htmlFor="hexMode">{t.hexMode}</label></div>
+            <div className="form-check mb-2"><input type="checkbox" className="form-check-input" id="shellMode"
+                                                    checked={shellMode}
+                                                    onChange={(e) => setShellMode(e.target.checked)}/><label
+              className="form-check-label" htmlFor="shellMode">{t.shellMode}</label></div>
+            <div className="form-group mb-2"><label>{t.encoding}</label><select className="form-select" value={encoding}
+                                                                                onChange={(e) => setEncoding(e.target.value as 'utf-8' | 'gbk')}>
+              <option value="utf-8">UTF-8</option>
+              <option value="gbk">GBK</option>
+            </select></div>
             <div className="row g-2 mb-2">
-              <div className="col-6"><label className="small">{t.frameTimeout}</label><input type="number" className="form-control form-control-sm" value={frameTimeout} onChange={e => setFrameTimeout(Math.max(0, Number(e.target.value)))} /></div>
-              <div className="col-6"><label className="small">{t.maxHistory}</label><input type="number" className="form-control form-control-sm" value={maxHistory} onChange={e => setMaxHistory(Math.max(10, Number(e.target.value)))} /></div>
+              <div className="col-6"><label className="small">{t.frameTimeout}</label><input type="number"
+                                                                                             className="form-control form-control-sm"
+                                                                                             value={frameTimeout}
+                                                                                             onChange={e => setFrameTimeout(Math.max(0, Number(e.target.value)))}/>
+              </div>
+              <div className="col-6"><label className="small">{t.maxHistory}</label><input type="number"
+                                                                                           className="form-control form-control-sm"
+                                                                                           value={maxHistory}
+                                                                                           onChange={e => setMaxHistory(Math.max(10, Number(e.target.value)))}/>
+              </div>
             </div>
-            <div className="form-check"><input type="checkbox" className="form-check-input" id="darkMode" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} /><label className="form-check-label" htmlFor="darkMode">{t.darkMode} ({darkMode ? t.auto : t.light})</label></div>
+            <div className="form-check"><input type="checkbox" className="form-check-input" id="darkMode"
+                                               checked={darkMode}
+                                               onChange={(e) => setDarkMode(e.target.checked)}/><label
+              className="form-check-label" htmlFor="darkMode">{t.darkMode} ({darkMode ? t.auto : t.light})</label></div>
           </div>
 
           <div className="panel-section">
-            <div className="section-title cursor-pointer d-flex justify-content-between align-items-center" onClick={() => setProtocolPanelCollapsed(!protocolPanelCollapsed)}>
+            <div className="section-title cursor-pointer d-flex justify-content-between align-items-center"
+                 onClick={() => setProtocolPanelCollapsed(!protocolPanelCollapsed)}>
               <span>
                 <i className="bi bi-braces"></i> {t.protocolMode}
                 {protocolEnabled && (
-                  <span className="badge rounded-pill bg-success ms-2" style={{ fontSize: '10px', padding: '2px 6px', verticalAlign: 'middle' }}>ON</span>
+                  <span className="badge rounded-pill bg-success ms-2"
+                        style={{fontSize: '10px', padding: '2px 6px', verticalAlign: 'middle'}}>ON</span>
                 )}
-                <button className="btn btn-link btn-sm p-0 ms-2" onClick={(e) => { e.stopPropagation(); alert(t.protocolHelp); }} title={t.help}>
+                <button className="btn btn-link btn-sm p-0 ms-2" onClick={(e) => {
+                  e.stopPropagation();
+                  alert(t.protocolHelp);
+                }} title={t.help}>
                   <i className="bi bi-question-circle"></i>
                 </button>
               </span>
               <i className={`bi bi-chevron-${protocolPanelCollapsed ? 'down' : 'up'} small transition-transform`}></i>
             </div>
-            
+
             {!protocolPanelCollapsed && (
               <>
                 <div className="d-flex align-items-center mb-3">
                   <div className="form-check flex-grow-1">
-                    <input type="checkbox" className="form-check-input" id="protocolEnabled" checked={protocolEnabled} onChange={(e) => setProtocolEnabled(e.target.checked)} />
+                    <input type="checkbox" className="form-check-input" id="protocolEnabled" checked={protocolEnabled}
+                           onChange={(e) => setProtocolEnabled(e.target.checked)}/>
                     <label className="form-check-label" htmlFor="protocolEnabled">{t.protocolEnabled}</label>
                   </div>
                   <div className="dropdown">
-                    <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown">
                       <i className="bi bi-list-stars me-1"></i> {t.presets}
                     </button>
                     <ul className="dropdown-menu dropdown-menu-end">
                       {Object.entries(PROTOCOL_PRESETS).map(([key, preset]) => (
                         <li key={key}>
-                          <button 
-                            className="dropdown-item" 
+                          <button
+                            className="dropdown-item"
                             onClick={() => {
-                              setPackCode(preset.pack);
-                              setUnpackCode(preset.unpack);
-                              if (preset.toString) setToStringCode(preset.toString);
+                              // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+                              const toCodeString = (f: string | Function) => typeof f === 'function' ? f.toString() : f;
+                              setPackCode(toCodeString(preset.pack));
+                              setUnpackCode(toCodeString(preset.unpack));
+                              if (preset.toString) setToStringCode(toCodeString(preset.toString));
                               setProtocolEnabled(true);
                             }}
                           >
@@ -502,7 +593,8 @@ function(option) {
                     <div className="mb-2">
                       <div className="d-flex justify-content-between align-items-center mb-1">
                         <label className="small">{t.packFunc}</label>
-                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'pack', code: packCode })}>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none"
+                                onClick={() => setActiveEditor({type: 'pack', code: packCode})}>
                           <i className="bi bi-arrows-fullscreen small"></i>
                         </button>
                       </div>
@@ -519,7 +611,8 @@ function(option) {
                     <div className="mb-2">
                       <div className="d-flex justify-content-between align-items-center mb-1">
                         <label className="small">{t.unpackFunc}</label>
-                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'unpack', code: unpackCode })}>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none"
+                                onClick={() => setActiveEditor({type: 'unpack', code: unpackCode})}>
                           <i className="bi bi-arrows-fullscreen small"></i>
                         </button>
                       </div>
@@ -536,7 +629,8 @@ function(option) {
                     <div className="mb-2">
                       <div className="d-flex justify-content-between align-items-center mb-1">
                         <label className="small">{t.toStringFunc}</label>
-                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'toString', code: toStringCode })}>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none"
+                                onClick={() => setActiveEditor({type: 'toString', code: toStringCode})}>
                           <i className="bi bi-arrows-fullscreen small"></i>
                         </button>
                       </div>
@@ -559,39 +653,46 @@ function(option) {
           {!shellMode && (
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-send"></i> {t.sendData}</div>
-              <div className="form-group mb-2"><textarea className="form-control send-area" value={sendData} onChange={(e) => setSendData(e.target.value)} placeholder={hexMode ? t.inputHex : t.inputText} rows={4} /></div>
-              <button className="btn btn-primary w-100" onClick={() => handleSend()} disabled={!connected}><i className="bi bi-send"></i> {t.send}</button>
+              <div className="form-group mb-2"><textarea className="form-control send-area" value={sendData}
+                                                         onChange={(e) => setSendData(e.target.value)}
+                                                         placeholder={hexMode ? t.inputHex : t.inputText} rows={4}/>
+              </div>
+              <button className="btn btn-primary w-100" onClick={() => handleSend()} disabled={!connected}><i
+                className="bi bi-send"></i> {t.send}</button>
             </div>
           )}
 
-          {connected && <div className="panel-section"><button className="btn btn-danger w-100" onClick={disconnect}><i className="bi bi-x-circle"></i> {t.disconnect}</button></div>}
+          {connected && <div className="panel-section">
+            <button className="btn btn-danger w-100" onClick={disconnect}><i
+              className="bi bi-x-circle"></i> {t.disconnect}</button>
+          </div>}
         </aside>
 
         <section className="terminal-panel">
           <div className="main-content-row h-100 d-flex">
             <div className="flex-grow-1 h-100 overflow-hidden">
               {shellMode ? (
-                <ShellTerminal 
-                  connected={connected} 
-                  onData={handleShellData} 
-                  onClear={handleClear} 
+                <ShellTerminal
+                  connected={connected}
+                  onData={handleShellData}
+                  onClear={handleClear}
                   lang={lang}
                   rxCount={rxCount}
                   txCount={txCount}
                   onResetStats={resetStats}
                 />
               ) : (
-                <Terminal 
-                  messages={messages} 
-                  hexMode={hexMode && !protocolEnabled} 
-                  onClear={handleClear} 
-                  onCopy={() => { 
-                    const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n'); 
-                    navigator.clipboard.writeText(text); 
-                    alert(t.copied); 
-                  }} 
-                  autoScroll={true} 
-                  lang={lang} 
+                <Terminal
+                  messages={messages}
+                  hexMode={hexMode && !protocolEnabled}
+                  onClear={handleClear}
+                  onCopy={() => {
+                    const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n');
+                    navigator.clipboard.writeText(text);
+                    alert(t.copied);
+                  }}
+                  autoScroll={true}
+                  lang={lang}
                   rxCount={rxCount}
                   txCount={txCount}
                   onResetStats={resetStats}
@@ -599,7 +700,7 @@ function(option) {
               )}
             </div>
             {!shellMode && (
-              <CommandPanel onSend={(content, type) => handleSend(content, type)} lang={lang} connected={connected} />
+              <CommandPanel onSend={(content, type) => handleSend(content, type)} lang={lang} connected={connected}/>
             )}
           </div>
         </section>
@@ -617,18 +718,30 @@ function(option) {
               </h5>
               <div className="d-flex gap-2">
                 <div className="dropdown">
-                  <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                  <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                          data-bs-toggle="dropdown">
                     {t.presets || 'Presets'}
                   </button>
                   <ul className="dropdown-menu dropdown-menu-end">
                     {Object.entries(PROTOCOL_PRESETS).map(([key, preset]) => (
                       <li key={key}>
-                        <button 
-                          className="dropdown-item" 
+                        <button
+                          className="dropdown-item"
                           onClick={() => {
-                            if (activeEditor.type === 'pack') setActiveEditor({...activeEditor, code: preset.pack});
-                            else if (activeEditor.type === 'unpack') setActiveEditor({...activeEditor, code: preset.unpack});
-                            else if (activeEditor.type === 'toString') setActiveEditor({...activeEditor, code: preset.toString || activeEditor.code});
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+                            const toCodeString = (f: string | Function) => typeof f === 'function' ? f.toString() : f;
+                            if (activeEditor.type === 'pack') setActiveEditor({
+                              ...activeEditor,
+                              code: toCodeString(preset.pack)
+                            });
+                            else if (activeEditor.type === 'unpack') setActiveEditor({
+                              ...activeEditor,
+                              code: toCodeString(preset.unpack)
+                            });
+                            else if (activeEditor.type === 'toString') setActiveEditor({
+                              ...activeEditor,
+                              code: toCodeString(preset.toString || '') || activeEditor.code
+                            });
                           }}
                         >
                           {preset.name}
@@ -643,14 +756,15 @@ function(option) {
             <div className="protocol-modal-body">
               <Editor
                 value={activeEditor.code}
-                onValueChange={code => setActiveEditor({ ...activeEditor, code })}
+                onValueChange={code => setActiveEditor({...activeEditor, code})}
                 highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
                 padding={20}
                 className="full-editor"
               />
             </div>
             <div className="protocol-modal-footer">
-              <button className="btn btn-secondary me-2" onClick={() => setActiveEditor(null)}>{t.clear || 'Cancel'}</button>
+              <button className="btn btn-secondary me-2"
+                      onClick={() => setActiveEditor(null)}>{t.clear || 'Cancel'}</button>
               <button className="btn btn-primary" onClick={() => {
                 if (activeEditor.type === 'pack') setPackCode(activeEditor.code);
                 else if (activeEditor.type === 'unpack') setUnpackCode(activeEditor.code);

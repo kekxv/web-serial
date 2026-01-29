@@ -1,8 +1,10 @@
 export default {
-    name: 'Face Detection Protocol',
-    pack: `/**
+  name: 'Face Detection Protocol',
+  pack: `/**
  * 打包函数
- * 输入 data 预期格式: { width: 640, height: 480, faces: [{score: 0.9, x: 10, y: 10, w: 100, h: 100}] }
+ * @param {Object} option
+ * @param {Object} option.data - 预期格式: { width: 640, height: 480, faces: [{score: 0.9, x: 10, y: 10, w: 100, h: 100}] }
+ * @param {Object} option.utils - 工具类
  */
 function(option) {
   const { data, utils } = option;
@@ -47,9 +49,11 @@ function(option) {
   
   return final;
 }`,
-    unpack: `/**
- * 解包函数
- * 解析包含宽高和人脸坐标的自定义帧
+  unpack: `/**
+ * 解包函数：解析包含宽高和人脸坐标的自定义帧
+ * @param {Object} option
+ * @param {Uint8Array} option.data - 接收原始字节
+ * @param {Object} option.utils - 工具类
  */
 function(option) {
   const { data, utils } = option;
@@ -81,8 +85,10 @@ function(option) {
   
   return { width, height, faceCount, faces, crcValid: crcReceived === crcCalc };
 }`,
-    toString: `/**
- * 输出函数
+  toString: `/**
+ * 输出函数：将解包后的对象转换为显示的文本
+ * @param {Object} option
+ * @param {any} option.data - unpack 后的数据
  */
 function(option) {
   const { data, utils } = option;

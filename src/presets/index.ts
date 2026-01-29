@@ -1,8 +1,18 @@
-interface ProtocolPreset {
+export interface ProtocolOption {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  utils: any;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ProtocolFunction = (option: ProtocolOption) => any;
+
+export interface ProtocolPreset {
   name: string;
-  pack: string;
-  unpack: string;
-  toString?: string;
+  pack: string | ProtocolFunction;
+  unpack: string | ProtocolFunction;
+  toString?: string | ProtocolFunction;
 }
 
 const modules = import.meta.glob('./*.ts', { eager: true });
@@ -20,4 +30,3 @@ for (const path in modules) {
 }
 
 export { PROTOCOL_PRESETS };
-export type { ProtocolPreset };
