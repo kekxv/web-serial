@@ -4,9 +4,10 @@ import './Terminal.css'
 
 export interface TerminalMessage {
   id: string
-  timestamp: string
+  timestamp: number // 使用毫秒时间戳
   data: string
   direction: 'rx' | 'tx'
+  count?: number
 }
 
 interface TerminalProps {
@@ -100,7 +101,14 @@ const Terminal: React.FC<TerminalProps> = ({
                   <i className={`bi ${getDirectionIcon(message.direction)}`}></i>
                   {getDirectionText(message.direction)}
                 </span>
-                <span className="message-timestamp">{message.timestamp}</span>
+                <div className="d-flex align-items-center gap-2">
+                  <span className="message-timestamp">
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                  </span>
+                  {message.count && message.count > 1 && (
+                    <span className="message-count">x{message.count}</span>
+                  )}
+                </div>
               </div>
               <div className="message-data">{formatData(message.data)}</div>
             </div>

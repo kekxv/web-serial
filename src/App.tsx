@@ -4,6 +4,11 @@ import BluetoothManager from './services/BluetoothManager'
 import Terminal, { type TerminalMessage } from './components/Terminal'
 import ShellTerminal from './components/ShellTerminal'
 import CommandPanel from './components/CommandPanel'
+import * as FormatUtils from './utils/FormatUtils'
+import Editor from 'react-simple-code-editor'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/themes/prism-tomorrow.css'
 import { translations, type Language } from './locales/translations'
 import './App.css'
 
@@ -49,9 +54,173 @@ function App() {
   const [rxCount, setRxCount] = useState(0)
   const [txCount, setTxCount] = useState(0)
 
+  // 协议模式相关的状态
+  const [protocolEnabled, setProtocolEnabled] = useState(false)
+  const [activeEditor, setActiveEditor] = useState<{ type: 'pack' | 'unpack' | 'toString', code: string } | null>(null)
+
+  const PROTOCOL_PRESETS = {
+    modbus_rtu_read: {
+      name: 'Modbus RTU Read (03)',
+      pack: `/**
+ * 打包函数：将用户输入转换为原始字节流
+ * @param {Object} option
+ * @param {string|Uint8Array} option.data - 用户在发送框输入的数据
+ * @param {Object} option.utils - 工具类 (crc16modbus, hexToUint8Array, etc.)
+ * @returns {Uint8Array|string} 发送到设备的原始数据
+ */
+function(option) {
+  const { data, utils } = option;
+  // 示例：给输入数据添加 Modbus RTU CRC 校验
+  // data 预期为: [slaveId, funcCode, startAddrH, startAddrL, countH, countL]
+  const buf = new Uint8Array(data.length + 2);
+  buf.set(data);
+  const crc = utils.crc16modbus(data);
+  buf[data.length] = crc & 0xFF;         // CRC 低字节
+  buf[data.length + 1] = (crc >> 8) & 0xFF; // CRC 高字节
+  return buf;
+}`,
+      unpack: `/**
+ * 解包函数：将接收到的原始字节流转换为逻辑对象
+ * @param {Object} option
+ * @param {Uint8Array} option.data - 从串口接收到的原始字节
+ * @param {Object} option.utils - 工具类
+ * @returns {any} 解包后的数据对象，将传递给 toString 函数
+ */
+function(option) {
+  const { data, utils } = option;
+  if (data.length < 4) return data;
+  
+  const payload = data.slice(0, data.length - 2);
+  const crcReceived = data[data.length - 2] | (data[data.length - 1] << 8);
+  const crcCalc = utils.crc16modbus(payload);
+  
+  // 返回一个结构化对象
+  return { 
+    slaveId: data[0],
+    func: data[1],
+    byteCount: data[2],
+    values: Array.from(data.slice(3, data.length - 2)),
+    crcValid: crcReceived === crcCalc
+  };
+}`,
+      toString: `/**
+ * 输出函数：将解包后的对象转换为显示的文本
+ * @param {Object} option
+ * @param {any} option.data - unpack 函数返回的对象
+ * @param {Object} option.utils - 工具类
+ * @returns {string} 终端显示的字符串
+ */
+function(option) {
+  const { data, utils } = option;
+  // 如果是对象且包含 Modbus 字段，格式化输出
+  if (typeof data === 'object' && data.values) {
+    const hexValues = data.values.map(v => v.toString(16).padStart(2, '0')).join(' ');
+    return \`[Modbus] 从站: \${data.slaveId} | 数据: \${hexValues} \${data.crcValid ? '' : '(校验失败)'}\`;
+  }
+  // 默认使用 HEX 打印
+  return utils.uint8ArrayToHex(data);
+}`
+    }
+  }
+
+  const [packCode, setPackCode] = useState(() => localStorage.getItem('protocol_pack') || `/**
+ * 打包函数 (Pack)
+ * @param {Object} option { data: 待发送内容, utils: 工具类 }
+ * @returns {Uint8Array|string}
+ */
+function(option) {
+  const { data, utils } = option;
+  return data;
+}`)
+  const [unpackCode, setUnpackCode] = useState(() => localStorage.getItem('protocol_unpack') || `/**
+ * 解包函数 (Unpack)
+ * @param {Object} option { data: 接收原始字节, utils: 工具类 }
+ * @returns {any}
+ */
+function(option) {
+  const { data, utils } = option;
+  return data;
+}`)
+  const [toStringCode, setToStringCode] = useState(() => localStorage.getItem('protocol_toString') || `/**
+ * 输出函数 (toString)
+ * @param {Object} option { data: unpack后的数据, utils: 工具类 }
+ * @returns {string}
+ */
+function(option) {
+  const { data, utils } = option;
+  if (data instanceof Uint8Array) return utils.uint8ArrayToString(data);
+  if (typeof data === "object") return JSON.stringify(data);
+  return String(data);
+}`)
+
+  const addMessage = useCallback((data: string, direction: 'rx' | 'tx') => {
+    setMessages((prev) => {
+      const now = Date.now()
+      if (prev.length > 0) {
+        const lastMessage = prev[prev.length - 1]
+        
+        // 只要内容完全一致、方向一致就合并计数
+        if (
+          lastMessage.data === data && 
+          lastMessage.direction === direction
+        ) {
+          const newMessages = [...prev]
+          newMessages[newMessages.length - 1] = {
+            ...lastMessage,
+            timestamp: now,
+            count: (lastMessage.count || 1) + 1
+          }
+          return newMessages
+        }
+      }
+
+      const newMessage: TerminalMessage = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        timestamp: now,
+        data,
+        direction,
+        count: 1
+      }
+      
+      const newMessages = [...prev, newMessage]
+      if (newMessages.length > maxHistory) {
+        return newMessages.slice(newMessages.length - maxHistory)
+      }
+      return newMessages
+    })
+  }, [maxHistory])
+
   // 2. Refs 用于分帧合并
   const rxFrameBuffer = useRef<number[]>([])
   const rxFrameTimer = useRef<number | null>(null)
+
+  const runProtocolFunc = useCallback((code: string, data: unknown) => {
+    try {
+      // 提取函数体，支持 function(option) { ... } 或直接的代码
+      let body = code
+      const match = code.match(/function\s*\(.*?\)\s*\{([\s\S]*)\}/)
+      if (match) {
+        body = match[1]
+      }
+      
+      const fn = new Function('option', body)
+      return fn({ data, utils: FormatUtils })
+    } catch (e) {
+      console.error('Protocol function error:', e)
+      return data
+    }
+  }, [])
+
+  const processData = useCallback((data: Uint8Array, direction: 'rx' | 'tx') => {
+    if (protocolEnabled) {
+      const unpacked = runProtocolFunc(unpackCode, data)
+      const formatted = runProtocolFunc(toStringCode, unpacked)
+      addMessage(String(formatted), direction)
+    } else {
+      const decoder = new TextDecoder(encoding)
+      addMessage(decoder.decode(data), direction)
+    }
+  }, [protocolEnabled, unpackCode, toStringCode, encoding, addMessage, runProtocolFunc])
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     baudRate: 115200,
@@ -73,6 +242,12 @@ function App() {
   }, [lang])
 
   useEffect(() => {
+    localStorage.setItem('protocol_pack', packCode)
+    localStorage.setItem('protocol_unpack', unpackCode)
+    localStorage.setItem('protocol_toString', toStringCode)
+  }, [packCode, unpackCode, toStringCode])
+
+  useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches)
     mediaQuery.addEventListener('change', handler)
@@ -85,33 +260,23 @@ function App() {
   }, [darkMode])
 
   // 4. 回调函数
-  const addMessage = useCallback((data: string, direction: 'rx' | 'tx') => {
-    const newMessage: TerminalMessage = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-      timestamp: new Date().toLocaleTimeString(),
-      data,
-      direction,
-    }
-    setMessages((prev) => {
-      const newMessages = [...prev, newMessage]
-      // 自动截断超出长度的消息
-      if (newMessages.length > maxHistory) {
-        return newMessages.slice(newMessages.length - maxHistory)
-      }
-      return newMessages
-    })
-  }, [maxHistory])
-
   const flushRxFrame = useCallback(() => {
-    if (rxFrameBuffer.current.length === 0) return
     const data = new Uint8Array(rxFrameBuffer.current)
-    rxFrameBuffer.current = []
-    const decoder = new TextDecoder(encoding)
-    addMessage(decoder.decode(data), 'rx')
-  }, [encoding, addMessage])
+    rxFrameBuffer.current = [] // 立即清空，防止新数据混入
+    if (rxFrameTimer.current) {
+      window.clearTimeout(rxFrameTimer.current)
+      rxFrameTimer.current = null
+    }
+    processData(data, 'rx')
+  }, [processData])
 
   const handleClear = () => {
     setMessages([])
+    rxFrameBuffer.current = [] // 清除缓存
+    if (rxFrameTimer.current) {
+      window.clearTimeout(rxFrameTimer.current)
+      rxFrameTimer.current = null
+    }
     if (window.shellTerminal) {
       window.shellTerminal.clear()
     }
@@ -124,6 +289,7 @@ function App() {
 
   useEffect(() => {
     const onDataHandler = (data: Uint8Array, direction: 'rx' | 'tx') => {
+      // 统计和 Shell 模式处理
       if (direction === 'rx') {
         setRxCount(prev => prev + data.length)
         if (window.shellTerminal) window.shellTerminal.write(data)
@@ -135,19 +301,22 @@ function App() {
 
       if (direction === 'rx') {
         if (frameTimeout > 0) {
-          if (rxFrameTimer.current) window.clearTimeout(rxFrameTimer.current)
+          // 如果已经在计时，先清除旧计时
+          if (rxFrameTimer.current) {
+            window.clearTimeout(rxFrameTimer.current)
+          }
+          // 放入缓冲区
           rxFrameBuffer.current.push(...Array.from(data))
+          // 重新启动计时
           rxFrameTimer.current = window.setTimeout(() => {
             flushRxFrame()
-            rxFrameTimer.current = null
           }, frameTimeout)
         } else {
-          const decoder = new TextDecoder(encoding)
-          addMessage(decoder.decode(data), 'rx')
+          processData(data, 'rx')
         }
       } else {
-        const decoder = new TextDecoder(encoding)
-        addMessage(decoder.decode(data), 'tx')
+        // 发送的数据不进入分帧缓冲，直接处理
+        processData(data, 'tx')
       }
     }
 
@@ -170,7 +339,7 @@ function App() {
     return () => {
       if (rxFrameTimer.current) window.clearTimeout(rxFrameTimer.current)
     }
-  }, [encoding, connectionType, frameTimeout, shellMode, flushRxFrame, addMessage])
+  }, [connectionType, frameTimeout, shellMode, flushRxFrame, processData, addMessage])
 
   // 5. 业务逻辑
   const connectSerial = async () => {
@@ -210,18 +379,22 @@ function App() {
     const rawData = customData !== undefined ? customData : sendData
     if (!rawData.trim()) return
     const isHex = customType ? (customType === 'hex') : hexMode
-    let dataToSend: string | Uint8Array = rawData
+    
+    let dataToPack: string | Uint8Array = rawData
     if (isHex) {
       const cleanHex = rawData.replace(/\s+/g, '').replace(/0x/gi, '')
       if (!/^[0-9A-Fa-f]{2,}$/.test(cleanHex)) {
         alert(t.inputHex)
         return
       }
-      const length = (cleanHex.length / 2) | 0
-      const result = new Uint8Array(length)
-      for (let i = 0; i < length; i++) result[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16)
-      dataToSend = result
+      dataToPack = FormatUtils.hexToUint8Array(cleanHex)
     }
+
+    let dataToSend: string | Uint8Array = dataToPack
+    if (protocolEnabled) {
+      dataToSend = runProtocolFunc(packCode, dataToPack)
+    }
+
     const success = connectionType === 'serial' ? await SerialPortManager.send(dataToSend) : await BluetoothManager.send(dataToSend)
     if (!success) alert(t.sendFail)
     else if (customData === undefined) setSendData('')
@@ -310,6 +483,74 @@ function App() {
             <div className="form-check"><input type="checkbox" className="form-check-input" id="darkMode" checked={darkMode} onChange={(e) => setDarkMode(e.target.checked)} /><label className="form-check-label" htmlFor="darkMode">{t.darkMode} ({darkMode ? t.auto : t.light})</label></div>
           </div>
 
+          <div className="panel-section">
+            <div className="section-title">
+              <i className="bi bi-braces"></i> {t.protocolMode}
+              <button className="btn btn-link btn-sm p-0 ms-2" onClick={() => alert(t.protocolHelp)} title={t.help}>
+                <i className="bi bi-question-circle"></i>
+              </button>
+            </div>
+            <div className="form-check mb-3">
+              <input type="checkbox" className="form-check-input" id="protocolEnabled" checked={protocolEnabled} onChange={(e) => setProtocolEnabled(e.target.checked)} />
+              <label className="form-check-label" htmlFor="protocolEnabled">{t.protocolEnabled}</label>
+            </div>
+            {protocolEnabled && (
+              <div className="protocol-config">
+                <div className="mb-2">
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <label className="small">{t.packFunc}</label>
+                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'pack', code: packCode })}>
+                      <i className="bi bi-arrows-fullscreen small"></i>
+                    </button>
+                  </div>
+                  <div className="editor-container">
+                    <Editor
+                      value={packCode}
+                      onValueChange={code => setPackCode(code)}
+                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                      padding={10}
+                      className="code-area-highlight"
+                    />
+                  </div>
+                </div>
+                <div className="mb-2">
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <label className="small">{t.unpackFunc}</label>
+                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'unpack', code: unpackCode })}>
+                      <i className="bi bi-arrows-fullscreen small"></i>
+                    </button>
+                  </div>
+                  <div className="editor-container">
+                    <Editor
+                      value={unpackCode}
+                      onValueChange={code => setUnpackCode(code)}
+                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                      padding={10}
+                      className="code-area-highlight"
+                    />
+                  </div>
+                </div>
+                <div className="mb-2">
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <label className="small">{t.toStringFunc}</label>
+                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'toString', code: toStringCode })}>
+                      <i className="bi bi-arrows-fullscreen small"></i>
+                    </button>
+                  </div>
+                  <div className="editor-container">
+                    <Editor
+                      value={toStringCode}
+                      onValueChange={code => setToStringCode(code)}
+                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                      padding={10}
+                      className="code-area-highlight"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {!shellMode && (
             <div className="panel-section">
               <div className="section-title"><i className="bi bi-send"></i> {t.sendData}</div>
@@ -329,7 +570,7 @@ function App() {
               ) : (
                 <Terminal 
                   messages={messages} 
-                  hexMode={hexMode} 
+                  hexMode={hexMode && !protocolEnabled} 
                   onClear={handleClear} 
                   onCopy={() => { 
                     const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n'); 
@@ -355,6 +596,60 @@ function App() {
         </div>
         <small className="text-muted">Web Serial Assistant v1.0 | Web Serial & Web Bluetooth</small>
       </footer>
+
+      {activeEditor && (
+        <div className="protocol-modal-overlay">
+          <div className="protocol-modal-content">
+            <div className="protocol-modal-header">
+              <h5 className="mb-0">
+                {activeEditor.type === 'pack' ? t.packFunc : activeEditor.type === 'unpack' ? t.unpackFunc : t.toStringFunc}
+              </h5>
+              <div className="d-flex gap-2">
+                <div className="dropdown">
+                  <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    {t.presets || 'Presets'}
+                  </button>
+                  <ul className="dropdown-menu dropdown-menu-end">
+                    {Object.entries(PROTOCOL_PRESETS).map(([key, preset]) => (
+                      <li key={key}>
+                        <button 
+                          className="dropdown-item" 
+                          onClick={() => {
+                            if (activeEditor.type === 'pack') setActiveEditor({...activeEditor, code: preset.pack});
+                            else if (activeEditor.type === 'unpack') setActiveEditor({...activeEditor, code: preset.unpack});
+                            else if (activeEditor.type === 'toString') setActiveEditor({...activeEditor, code: preset.toString || activeEditor.code});
+                          }}
+                        >
+                          {preset.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button className="btn-close btn-close-white" onClick={() => setActiveEditor(null)}></button>
+              </div>
+            </div>
+            <div className="protocol-modal-body">
+              <Editor
+                value={activeEditor.code}
+                onValueChange={code => setActiveEditor({ ...activeEditor, code })}
+                highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                padding={20}
+                className="full-editor"
+              />
+            </div>
+            <div className="protocol-modal-footer">
+              <button className="btn btn-secondary me-2" onClick={() => setActiveEditor(null)}>{t.clear || 'Cancel'}</button>
+              <button className="btn btn-primary" onClick={() => {
+                if (activeEditor.type === 'pack') setPackCode(activeEditor.code);
+                else if (activeEditor.type === 'unpack') setUnpackCode(activeEditor.code);
+                else if (activeEditor.type === 'toString') setToStringCode(activeEditor.code);
+                setActiveEditor(null);
+              }}>{t.save}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

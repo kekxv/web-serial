@@ -62,6 +62,15 @@ export const translations = {
     bytes: '字节',
     frameTimeout: '分帧超时 (ms)',
     maxHistory: '历史保留行数',
+    protocolMode: '协议模式',
+    protocolSettings: '协议配置',
+    packFunc: '打包函数 (Pack)',
+    unpackFunc: '解包函数 (Unpack)',
+    toStringFunc: '输出函数 (toString)',
+    protocolEnabled: '启用自定义协议',
+    help: '帮助',
+    protocolHelp: '自定义协议脚本支持 JavaScript。你可以访问 utils 对象中的工具函数，如 utils.hexToUint8Array, utils.uint8ArrayToHex, utils.crc16modbus 等。',
+    presets: '预设',
   },
   en: {
     title: 'Web Serial Assistant',
@@ -126,6 +135,15 @@ export const translations = {
     bytes: 'Bytes',
     frameTimeout: 'Frame Timeout (ms)',
     maxHistory: 'Max History Lines',
+    protocolMode: 'Protocol Mode',
+    protocolSettings: 'Protocol Settings',
+    packFunc: 'Pack Function',
+    unpackFunc: 'Unpack Function',
+    toStringFunc: 'toString Function',
+    protocolEnabled: 'Enable Custom Protocol',
+    help: 'Help',
+    protocolHelp: 'Custom protocol scripts support JavaScript. You can access utility functions in the utils object, such as utils.hexToUint8Array, utils.uint8ArrayToHex, utils.crc16modbus, etc.',
+    presets: 'Presets',
   }
 }
 

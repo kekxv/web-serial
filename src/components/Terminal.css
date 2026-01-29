@@ -211,6 +211,21 @@ body.light-theme .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   font-weight: 500;
 }
 
+.message-count {
+  background: #4caf50;
+  color: white;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+body.light-theme .message-count {
+  background: #2e7d32;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
 .message-data {
   word-break: break-all;
   white-space: pre-wrap;
