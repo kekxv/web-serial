@@ -17,6 +17,9 @@ interface TerminalProps {
   onCopy?: () => void
   autoScroll?: boolean
   lang: Language
+  rxCount?: number
+  txCount?: number
+  onResetStats?: () => void
 }
 
 const Terminal: React.FC<TerminalProps> = ({
@@ -26,6 +29,9 @@ const Terminal: React.FC<TerminalProps> = ({
   onCopy,
   autoScroll = true,
   lang,
+  rxCount = 0,
+  txCount = 0,
+  onResetStats,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const t = translations[lang]
@@ -66,10 +72,23 @@ const Terminal: React.FC<TerminalProps> = ({
   return (
     <div className="terminal-container">
       <div className="terminal-header">
-        <h6 className="mb-0">
-          <i className="bi bi-terminal me-2"></i>
-          {t.terminal}
-        </h6>
+        <div className="d-flex align-items-center flex-grow-1">
+          <h6 className="mb-0 me-3">
+            <i className="bi bi-terminal me-2"></i>
+            {t.terminal}
+          </h6>
+          <div className="terminal-stats-header d-flex align-items-center gap-2">
+            <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle">
+              RX: {rxCount}
+            </span>
+            <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle">
+              TX: {txCount}
+            </span>
+            <button className="btn btn-link btn-sm p-0 text-decoration-none text-muted" onClick={onResetStats} title={t.reset}>
+              <i className="bi bi-arrow-counterclockwise"></i>
+            </button>
+          </div>
+        </div>
         <div className="terminal-actions">
           <button
             className="btn btn-sm btn-outline-secondary me-2"

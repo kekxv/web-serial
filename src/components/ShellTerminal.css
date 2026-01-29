@@ -18,6 +18,16 @@
   border-bottom: 1px solid #333;
 }
 
+.terminal-stats-header {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+
+.terminal-stats-header .badge {
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
 .xterm-wrapper {
   flex: 1;
   padding: 8px;

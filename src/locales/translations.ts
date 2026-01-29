@@ -71,6 +71,8 @@ export const translations = {
     help: '帮助',
     protocolHelp: '自定义协议脚本支持 JavaScript。你可以访问 utils 对象中的工具函数，如 utils.hexToUint8Array, utils.uint8ArrayToHex, utils.crc16modbus 等。',
     presets: '预设',
+    selectPreset: '选择协议预设',
+    customProtocol: '自定义脚本',
   },
   en: {
     title: 'Web Serial Assistant',
@@ -144,6 +146,8 @@ export const translations = {
     help: 'Help',
     protocolHelp: 'Custom protocol scripts support JavaScript. You can access utility functions in the utils object, such as utils.hexToUint8Array, utils.uint8ArrayToHex, utils.crc16modbus, etc.',
     presets: 'Presets',
+    selectPreset: 'Select Preset',
+    customProtocol: 'Custom Script',
   }
 }
 

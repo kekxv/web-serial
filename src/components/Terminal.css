@@ -147,6 +147,16 @@ body.light-theme .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   font-weight: 500;
 }
 
+.terminal-stats-header {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+}
+
+.terminal-stats-header .badge {
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
 .terminal-actions {
   display: flex;
   gap: 4px;

@@ -11,6 +11,9 @@ interface ShellTerminalProps {
   onData: (data: Uint8Array) => void
   onClear?: () => void
   lang: Language
+  rxCount?: number
+  txCount?: number
+  onResetStats?: () => void
 }
 
 const ShellTerminal: React.FC<ShellTerminalProps> = ({
@@ -18,6 +21,9 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
   onData,
   onClear,
   lang,
+  rxCount = 0,
+  txCount = 0,
+  onResetStats,
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<Terminal | null>(null)
@@ -182,10 +188,23 @@ const ShellTerminal: React.FC<ShellTerminalProps> = ({
   return (
     <div className="shell-terminal-container">
       <div className="shell-terminal-header">
-        <h6 className="mb-0">
-          <i className="bi bi-terminal-fill me-2"></i>
-          {t.ttyTitle}
-        </h6>
+        <div className="d-flex align-items-center flex-grow-1">
+          <h6 className="mb-0 me-3">
+            <i className="bi bi-terminal-fill me-2"></i>
+            {t.ttyTitle}
+          </h6>
+          <div className="terminal-stats-header d-flex align-items-center gap-2">
+            <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle">
+              RX: {rxCount}
+            </span>
+            <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle">
+              TX: {txCount}
+            </span>
+            <button className="btn btn-link btn-sm p-0 text-decoration-none text-muted" onClick={onResetStats} title={t.reset}>
+              <i className="bi bi-arrow-counterclockwise"></i>
+            </button>
+          </div>
+        </div>
         <div className="shell-terminal-actions">
           <button 
             className="btn btn-sm btn-outline-danger" 
