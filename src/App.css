@@ -226,6 +226,15 @@ body {
   color: #4caf50;
 }
 
+.cursor-pointer {
+  cursor: pointer;
+  user-select: none;
+}
+
+.transition-transform {
+  transition: transform 0.2s ease;
+}
+
 .form-group label {
   display: block;
   margin-bottom: 6px;

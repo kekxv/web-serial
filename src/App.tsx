@@ -37,16 +37,26 @@ function App() {
   
   const t = translations[lang]
 
-  const [connectionType, setConnectionType] = useState<ConnectionType>('none')
-  const [connected, setConnected] = useState(false)
-  const [hexMode, setHexMode] = useState(false)
-  const [shellMode, setShellMode] = useState(false)
-  const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>('utf-8')
-  const [frameTimeout, setFrameTimeout] = useState(5)
-  const [maxHistory, setMaxHistory] = useState(1000) // 默认保留 1000 行
-  const [darkMode, setDarkMode] = useState(() => 
-    window.matchMedia('(prefers-color-scheme: dark)').matches
+  const [connectionType, setConnectionType] = useState<ConnectionType>(() => 
+    (localStorage.getItem('app_connection_type') as ConnectionType) || 'none'
   )
+  const [connected, setConnected] = useState(false)
+  const [hexMode, setHexMode] = useState(() => localStorage.getItem('app_hex_mode') === 'true')
+  const [shellMode, setShellMode] = useState(() => localStorage.getItem('app_shell_mode') === 'true')
+  const [encoding, setEncoding] = useState<'utf-8' | 'gbk'>(() => 
+    (localStorage.getItem('app_encoding') as 'utf-8' | 'gbk') || 'utf-8'
+  )
+  const [frameTimeout, setFrameTimeout] = useState(() => 
+    Number(localStorage.getItem('app_frame_timeout')) || 5
+  )
+  const [maxHistory, setMaxHistory] = useState(() => 
+    Number(localStorage.getItem('app_max_history')) || 1000
+  )
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('app_dark_mode')
+    if (saved !== null) return saved === 'true'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [messages, setMessages] = useState<TerminalMessage[]>([])
   const [sendData, setSendData] = useState('')
   
@@ -55,7 +65,8 @@ function App() {
   const [txCount, setTxCount] = useState(0)
 
   // 协议模式相关的状态
-  const [protocolEnabled, setProtocolEnabled] = useState(false)
+  const [protocolEnabled, setProtocolEnabled] = useState(() => localStorage.getItem('app_protocol_enabled') === 'true')
+  const [protocolPanelCollapsed, setProtocolPanelCollapsed] = useState(() => localStorage.getItem('app_protocol_panel_collapsed') === 'true')
   const [activeEditor, setActiveEditor] = useState<{ type: 'pack' | 'unpack' | 'toString', code: string } | null>(null)
 
   const PROTOCOL_PRESETS = {
@@ -322,18 +333,24 @@ function(option) {
     }
   }, [protocolEnabled, unpackCode, toStringCode, encoding, addMessage, runProtocolFunc])
 
-  const [serialConfig, setSerialConfig] = useState<SerialConfig>({
-    baudRate: 115200,
-    dataBits: 8,
-    stopBits: 1,
-    parity: 'none',
+  const [serialConfig, setSerialConfig] = useState<SerialConfig>(() => {
+    const saved = localStorage.getItem('app_serial_config')
+    return saved ? JSON.parse(saved) : {
+      baudRate: 115200,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+    }
   })
 
-  const [bluetoothConfig, setBluetoothConfig] = useState<BluetoothConfig>({
-    serviceUUID: '0xfff0', 
-    characteristicUUID: '0xfff1',
-    namePrefix: 'KT',
-    filterType: 'name'
+  const [bluetoothConfig, setBluetoothConfig] = useState<BluetoothConfig>(() => {
+    const saved = localStorage.getItem('app_bluetooth_config')
+    return saved ? JSON.parse(saved) : {
+      serviceUUID: '0xfff0', 
+      characteristicUUID: '0xfff1',
+      namePrefix: 'KT',
+      filterType: 'name'
+    }
   })
 
   // 3. 副作用处理
@@ -346,6 +363,23 @@ function(option) {
     localStorage.setItem('protocol_unpack', unpackCode)
     localStorage.setItem('protocol_toString', toStringCode)
   }, [packCode, unpackCode, toStringCode])
+
+  useEffect(() => {
+    localStorage.setItem('app_connection_type', connectionType)
+    localStorage.setItem('app_hex_mode', String(hexMode))
+    localStorage.setItem('app_shell_mode', String(shellMode))
+    localStorage.setItem('app_encoding', encoding)
+    localStorage.setItem('app_frame_timeout', String(frameTimeout))
+    localStorage.setItem('app_max_history', String(maxHistory))
+    localStorage.setItem('app_dark_mode', String(darkMode))
+    localStorage.setItem('app_protocol_enabled', String(protocolEnabled))
+    localStorage.setItem('app_protocol_panel_collapsed', String(protocolPanelCollapsed))
+    localStorage.setItem('app_serial_config', JSON.stringify(serialConfig))
+    localStorage.setItem('app_bluetooth_config', JSON.stringify(bluetoothConfig))
+  }, [
+    connectionType, hexMode, shellMode, encoding, frameTimeout, 
+    maxHistory, darkMode, protocolEnabled, protocolPanelCollapsed, serialConfig, bluetoothConfig
+  ])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -584,94 +618,105 @@ function(option) {
           </div>
 
           <div className="panel-section">
-            <div className="section-title">
-              <i className="bi bi-braces"></i> {t.protocolMode}
-              <button className="btn btn-link btn-sm p-0 ms-2" onClick={() => alert(t.protocolHelp)} title={t.help}>
-                <i className="bi bi-question-circle"></i>
-              </button>
-            </div>
-            <div className="d-flex align-items-center mb-3">
-              <div className="form-check flex-grow-1">
-                <input type="checkbox" className="form-check-input" id="protocolEnabled" checked={protocolEnabled} onChange={(e) => setProtocolEnabled(e.target.checked)} />
-                <label className="form-check-label" htmlFor="protocolEnabled">{t.protocolEnabled}</label>
-              </div>
-              <div className="dropdown">
-                <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                  <i className="bi bi-list-stars me-1"></i> {t.presets}
+            <div className="section-title cursor-pointer d-flex justify-content-between align-items-center" onClick={() => setProtocolPanelCollapsed(!protocolPanelCollapsed)}>
+              <span>
+                <i className="bi bi-braces"></i> {t.protocolMode}
+                {protocolEnabled && (
+                  <span className="badge rounded-pill bg-success ms-2" style={{ fontSize: '10px', padding: '2px 6px', verticalAlign: 'middle' }}>ON</span>
+                )}
+                <button className="btn btn-link btn-sm p-0 ms-2" onClick={(e) => { e.stopPropagation(); alert(t.protocolHelp); }} title={t.help}>
+                  <i className="bi bi-question-circle"></i>
                 </button>
-                <ul className="dropdown-menu dropdown-menu-end">
-                  {Object.entries(PROTOCOL_PRESETS).map(([key, preset]) => (
-                    <li key={key}>
-                      <button 
-                        className="dropdown-item" 
-                        onClick={() => {
-                          setPackCode(preset.pack);
-                          setUnpackCode(preset.unpack);
-                          if (preset.toString) setToStringCode(preset.toString);
-                          setProtocolEnabled(true);
-                        }}
-                      >
-                        {preset.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              </span>
+              <i className={`bi bi-chevron-${protocolPanelCollapsed ? 'down' : 'up'} small transition-transform`}></i>
             </div>
-            {protocolEnabled && (
-              <div className="protocol-config">
-                <div className="mb-2">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <label className="small">{t.packFunc}</label>
-                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'pack', code: packCode })}>
-                      <i className="bi bi-arrows-fullscreen small"></i>
-                    </button>
+            
+            {!protocolPanelCollapsed && (
+              <>
+                <div className="d-flex align-items-center mb-3">
+                  <div className="form-check flex-grow-1">
+                    <input type="checkbox" className="form-check-input" id="protocolEnabled" checked={protocolEnabled} onChange={(e) => setProtocolEnabled(e.target.checked)} />
+                    <label className="form-check-label" htmlFor="protocolEnabled">{t.protocolEnabled}</label>
                   </div>
-                  <div className="editor-container">
-                    <Editor
-                      value={packCode}
-                      onValueChange={code => setPackCode(code)}
-                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
-                      padding={10}
-                      className="code-area-highlight"
-                    />
+                  <div className="dropdown">
+                    <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                      <i className="bi bi-list-stars me-1"></i> {t.presets}
+                    </button>
+                    <ul className="dropdown-menu dropdown-menu-end">
+                      {Object.entries(PROTOCOL_PRESETS).map(([key, preset]) => (
+                        <li key={key}>
+                          <button 
+                            className="dropdown-item" 
+                            onClick={() => {
+                              setPackCode(preset.pack);
+                              setUnpackCode(preset.unpack);
+                              if (preset.toString) setToStringCode(preset.toString);
+                              setProtocolEnabled(true);
+                            }}
+                          >
+                            {preset.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
-                <div className="mb-2">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <label className="small">{t.unpackFunc}</label>
-                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'unpack', code: unpackCode })}>
-                      <i className="bi bi-arrows-fullscreen small"></i>
-                    </button>
+                {protocolEnabled && (
+                  <div className="protocol-config">
+                    <div className="mb-2">
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="small">{t.packFunc}</label>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'pack', code: packCode })}>
+                          <i className="bi bi-arrows-fullscreen small"></i>
+                        </button>
+                      </div>
+                      <div className="editor-container">
+                        <Editor
+                          value={packCode}
+                          onValueChange={code => setPackCode(code)}
+                          highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                          padding={10}
+                          className="code-area-highlight"
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="small">{t.unpackFunc}</label>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'unpack', code: unpackCode })}>
+                          <i className="bi bi-arrows-fullscreen small"></i>
+                        </button>
+                      </div>
+                      <div className="editor-container">
+                        <Editor
+                          value={unpackCode}
+                          onValueChange={code => setUnpackCode(code)}
+                          highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                          padding={10}
+                          className="code-area-highlight"
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-2">
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="small">{t.toStringFunc}</label>
+                        <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'toString', code: toStringCode })}>
+                          <i className="bi bi-arrows-fullscreen small"></i>
+                        </button>
+                      </div>
+                      <div className="editor-container">
+                        <Editor
+                          value={toStringCode}
+                          onValueChange={code => setToStringCode(code)}
+                          highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
+                          padding={10}
+                          className="code-area-highlight"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="editor-container">
-                    <Editor
-                      value={unpackCode}
-                      onValueChange={code => setUnpackCode(code)}
-                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
-                      padding={10}
-                      className="code-area-highlight"
-                    />
-                  </div>
-                </div>
-                <div className="mb-2">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <label className="small">{t.toStringFunc}</label>
-                    <button className="btn btn-link btn-sm p-0 text-decoration-none" onClick={() => setActiveEditor({ type: 'toString', code: toStringCode })}>
-                      <i className="bi bi-arrows-fullscreen small"></i>
-                    </button>
-                  </div>
-                  <div className="editor-container">
-                    <Editor
-                      value={toStringCode}
-                      onValueChange={code => setToStringCode(code)}
-                      highlight={code => Prism.highlight(code, Prism.languages.javascript, 'javascript')}
-                      padding={10}
-                      className="code-area-highlight"
-                    />
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </div>
 
