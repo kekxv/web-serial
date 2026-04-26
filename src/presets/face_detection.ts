@@ -107,6 +107,11 @@ function(option) {
     return str;
   }
   return utils.uint8ArrayToHex(data);
-}`
+}`,
+  fields: [
+    { name: '宽度', key: 'width', type: 'number', default: 640 },
+    { name: '高度', key: 'height', type: 'number', default: 480 },
+    { name: '人脸数据 (JSON)', key: 'faces', type: 'text', default: '[]', placeholder: '[{score:0.9, x:10, y:10, w:100, h:100}]' }
+  ]
 }
 

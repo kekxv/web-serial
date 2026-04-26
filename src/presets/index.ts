@@ -8,11 +8,20 @@ export interface ProtocolOption {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ProtocolFunction = (option: ProtocolOption) => any;
 
+export interface ProtocolField {
+  name: string;
+  key: string;
+  type: 'number' | 'text';
+  default?: any;
+  placeholder?: string;
+}
+
 export interface ProtocolPreset {
   name: string;
   pack: string | ProtocolFunction;
   unpack: string | ProtocolFunction;
   toString?: string | ProtocolFunction;
+  fields?: ProtocolField[];
 }
 
 const modules = import.meta.glob('./*.ts', { eager: true });
