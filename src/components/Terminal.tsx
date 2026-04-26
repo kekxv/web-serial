@@ -12,7 +12,6 @@ export interface TerminalMessage {
 
 interface TerminalProps {
   messages: TerminalMessage[]
-  hexMode: boolean
   onClear?: () => void
   onCopy?: () => void
   autoScroll?: boolean
@@ -24,7 +23,6 @@ interface TerminalProps {
 
 const Terminal: React.FC<TerminalProps> = ({
   messages,
-  hexMode,
   onClear,
   onCopy,
   autoScroll = true,
@@ -43,17 +41,7 @@ const Terminal: React.FC<TerminalProps> = ({
   }, [messages, autoScroll])
 
   const formatData = (data: string) => {
-    if (hexMode) {
-      try {
-        return data
-          .split('')
-          .map((char) => char.charCodeAt(0).toString(16).padStart(2, '0'))
-          .join(' ')
-          .toUpperCase()
-      } catch {
-        return data
-      }
-    }
+    // hex 转换由 processData 处理，这里不做任何转换
     return data
   }
 

@@ -8,7 +8,7 @@ export default {
  */
 function(option) {
   const { data, utils } = option;
-  const STA = 0xFE; // 假设 STA 为 0xFE
+  const STA = 0x02; // 假设 STA 为 0xFE
   const faces = data.faces || [];
   const faceCount = Math.min(faces.length, 2);
   

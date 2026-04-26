@@ -174,11 +174,13 @@ function(option) {
       const unpacked = runProtocolFunc(unpackCode, data)
       const formatted = runProtocolFunc(toStringCode, unpacked)
       addMessage(String(formatted), direction)
+    } else if (hexMode) {
+      addMessage(FormatUtils.uint8ArrayToHex(data), direction)
     } else {
       const decoder = new TextDecoder(encoding)
       addMessage(decoder.decode(data), direction)
     }
-  }, [protocolEnabled, unpackCode, toStringCode, encoding, addMessage, runProtocolFunc])
+  }, [protocolEnabled, unpackCode, toStringCode, encoding, hexMode, addMessage, runProtocolFunc])
 
   const [serialConfig, setSerialConfig] = useState<SerialConfig>(() => {
     const saved = localStorage.getItem('app_serial_config')
@@ -684,7 +686,6 @@ function(option) {
               ) : (
                 <Terminal
                   messages={messages}
-                  hexMode={hexMode && !protocolEnabled}
                   onClear={handleClear}
                   onCopy={() => {
                     const text = messages.map(m => `[${m.timestamp}] ${m.direction.toUpperCase()}: ${m.data}`).join('\n');
