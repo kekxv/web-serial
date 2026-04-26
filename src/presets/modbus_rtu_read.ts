@@ -3,6 +3,10 @@ import {type ProtocolPreset} from './index';
 const preset: ProtocolPreset = {
   name: 'Modbus RTU Read (03)',
   pack: ({data, utils}) => {
+    // 如果已经是 Uint8Array，或者是字符串，或者是没有长度的数据，直接返回
+    if (data instanceof Uint8Array || typeof data !== 'object' || !Array.isArray(data)) {
+      return data;
+    }
     // data 预期为: [slaveId, funcCode, startAddrH, startAddrL, countH, countL]
     const buf = new Uint8Array(data.length + 2);
     buf.set(data);

@@ -8,7 +8,11 @@ export default {
  */
 function(option) {
   const { data, utils } = option;
-  const STA = 0x02; // 假设 STA 为 0xFE
+  // 如果是字节数组，或者不是对象，或者没有 width 属性，则不进行打包
+  if (data instanceof Uint8Array || typeof data !== 'object' || data.width === undefined) {
+    return data;
+  }
+  const STA = 0x02; // STA 为 0x02
   const faces = data.faces || [];
   const faceCount = Math.min(faces.length, 2);
   
@@ -34,8 +38,8 @@ function(option) {
     buf.push(face.h & 0xFF);
   }
   
-  // 设置长度: 当前大小 + 4字节CRC
-  buf[1] = (buf.length + 4) & 0xFF;
+  // 设置长度: 与 C++ 对齐，data[1] = data.size() - 2
+  buf[1] = (buf.length - 2) & 0xFF;
   
   const uint8 = new Uint8Array(buf);
   const crc = utils.crc32(uint8);
@@ -57,13 +61,15 @@ function(option) {
  */
 function(option) {
   const { data, utils } = option;
-  if (data.length < 11) return data; // 最小长度检查
+  if (data.length < 11) return data; // 最小长度检查 (STA(1) + LEN(1) + W(2) + H(2) + CNT(1) + CRC(4))
   
-  const len = data[1];
-  if (data.length < len) return data; // 长度不足
+  const lenField = data[1];
+  const totalLen = lenField + 6; // 与 C++ 对齐: 总长 = 长度字段 + 2(头) + 4(CRC)
+  if (data.length < totalLen) return data; // 长度不足
   
-  const payload = data.slice(0, len - 4);
-  const crcReceived = ((data[len-4] << 24) | (data[len-3] << 16) | (data[len-2] << 8) | data[len-1]) >>> 0;
+  const payload = data.slice(0, lenField + 2); // 校验范围包含 STA 和 LEN
+  const crcOffset = lenField + 2;
+  const crcReceived = ((data[crcOffset] << 24) | (data[crcOffset+1] << 16) | (data[crcOffset+2] << 8) | data[crcOffset+3]) >>> 0;
   const crcCalc = utils.crc32(payload);
   
   const width = (data[2] << 8) | data[3];
@@ -103,3 +109,4 @@ function(option) {
   return utils.uint8ArrayToHex(data);
 }`
 }
+
